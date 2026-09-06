@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useDB, fmtDT, roleLabel, toast, type User } from "../../lib/db";
 import {
   useBank,
@@ -25,7 +25,11 @@ import {
   profileOf,
   saveProfile,
   setDisplayCurrency,
+  setDisplayUnit,
+  displayUnitOf,
   setFrozen,
+  UNITS,
+  UNIT_LEGEND,
   transfer,
   txsForAccount,
   txTypeName,
@@ -37,10 +41,12 @@ import {
   type BankTx,
 } from "../../lib/bank";
 import { IcArrowL, IcCheck, IcClock, IcDoc, IcGlobe, IcPlus, IcSend, IcUsers, IcX } from "../../lib/icons";
+import QrPage, { type QrPrefill } from "./bank/QrPage";
 
 type Page =
   | "dash"
   | "transfer"
+  | "qr"
   | "txs"
   | "rates"
   | "open"
@@ -60,11 +66,13 @@ export default function BankSite({ user }: { user: User }) {
   const [page, setPage] = useState<Page>("dash");
   const [detailId, setDetailId] = useState<string | null>(null);
   const [toastKey, setToastKey] = useState(0);
+  const [qrPrefill, setQrPrefill] = useState<QrPrefill | null>(null);
   const refresh = () => setToastKey((k) => k + 1);
 
   const NAV: Array<{ id: Page; label: string; admin?: boolean }> = [
     { id: "dash", label: "Кабинет" },
     { id: "transfer", label: "Перевод" },
+    { id: "qr", label: "QR-перевод" },
     { id: "txs", label: "Операции" },
     { id: "rates", label: "Курсы" },
     { id: "open", label: "Новый счёт" },
@@ -83,7 +91,7 @@ export default function BankSite({ user }: { user: User }) {
       <div className="fadeUp flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="mono text-[10px] tracking-[0.3em] text-[var(--dim)]">
-            ARGIAN NAZIONAL BANK • SB.ARG : 8001 • ВЫПУСК V1.6
+            ARGIAN NAZIONAL BANK • SB.ARG : 8001 • ВЫПУСК V1.7 • ВАЛЮТА: АРГСКИЙ ТО
           </p>
           <h1 className="display mt-2 text-3xl font-extrabold tracking-wide sm:text-4xl">
             STATUS<span className="text-[var(--gold)]">BANKO</span>
@@ -121,7 +129,17 @@ export default function BankSite({ user }: { user: User }) {
         ) : page === "dash" ? (
           <DashPage user={user} onOpen={(id) => setDetailId(id)} />
         ) : page === "transfer" ? (
-          <TransferPage user={user} onChanged={refresh} />
+          <TransferPage user={user} onChanged={refresh} prefill={qrPrefill} onPrefillUsed={() => setQrPrefill(null)} />
+        ) : page === "qr" ? (
+          <QrPage
+            user={user}
+            onPay={(p) => {
+              setQrPrefill(p);
+              setDetailId(null);
+              setPage("transfer");
+              toast("Платёжный код распознан — проверьте детали перевода", "info");
+            }}
+          />
         ) : page === "txs" ? (
           <TxsPage user={user} />
         ) : page === "rates" ? (
@@ -143,7 +161,7 @@ export default function BankSite({ user }: { user: User }) {
 
       <p className="mono mt-10 border-t border-[var(--line)] pt-4 text-[9.5px] leading-4 tracking-[0.16em] text-[var(--dim)]">
         STATUSBANKO — ГОСУДАРСТВЕННЫЙ БАНК ИМПЕРИИ АРГИЯ. ВСЕ ОПЕРАЦИИ АРХИВИРУЮТСЯ И АНАЛИЗИРУЮТСЯ ГНИЦСТ
-        СОГЛАСНО СТ. 1 (187) КГТ. КУРСЫ УСТАНАВЛИВАЕТ БАНК; ОСНОВНАЯ ВАЛЮТА — {primaryCurrency()?.code ?? "ARY"}.
+        СОГЛАСНО СТ. 1 (187) КГТ. КУРСЫ УСТАНАВЛИВАЕТ БАНК; ОСНОВНАЯ ВАЛЮТА — {primaryCurrency()?.code ?? "ATO"} (АРГСКИЙ ТО).
       </p>
     </div>
   );
@@ -155,6 +173,9 @@ function DashPage({ user, onOpen }: { user: User; onOpen: (id: string) => void }
   const bank = useBank();
   const my = accountsForUser(user.login);
   const disp = displayCurrencyOf(user.login);
+  const unit = displayUnitOf(user.login);
+  const prim = primaryCurrency();
+  const inUnit = disp.code === prim?.code;
 
   const total = useMemo(() => {
     let sum = 0;
@@ -171,15 +192,52 @@ function DashPage({ user, onOpen }: { user: User; onOpen: (id: string) => void }
   const recent = bank.txs.filter((t) => myIds.has(t.from ?? "") || myIds.has(t.to)).slice(0, 2);
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[340px_1fr]">
+    <div>
+      {/* денежная реформа */}
+      <div className="fadeUp mb-4 border-l-2 border-[var(--gold)] bg-[rgba(212,175,55,.06)] px-4 py-3">
+        <p className="mono text-[10px] tracking-[0.25em] text-[var(--gold2)]">ДЕНЕЖНАЯ РЕФОРМА ИМПЕРИИ АРГИЯ</p>
+        <p className="mt-1 text-[12.5px] leading-relaxed text-[var(--txt2)]">
+          Государственная валюта — <span className="font-bold text-[var(--txt)]">Аргский То</span> (АТО).{" "}
+          {UNIT_LEGEND}. Аргские Йены (ARY) изъяты из обращения; остатки пересчитаны Казначейством.
+        </p>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[340px_1fr]">
       <div className="flex flex-col gap-4">
         <div className="panel fadeUp border-t-2 border-t-[var(--gold)] p-5">
           <p className="mono text-[10px] tracking-[0.25em] text-[var(--dim)]">ОБЩИЙ БАЛАНС</p>
           <p className="display mt-2 text-4xl font-extrabold text-[var(--gold2)]">
-            {total.toLocaleString("ru-RU", { maximumFractionDigits: 2 })}
-            <span className="ml-2 text-lg text-[var(--txt2)]">{disp.symbol}</span>
+            {(inUnit ? total / unit.to : total).toLocaleString("ru-RU", { maximumFractionDigits: unit.code === "ki" && inUnit ? 0 : 2 })}
+            <span className="ml-2 text-lg text-[var(--txt2)]">{inUnit ? unit.label : disp.symbol}</span>
           </p>
-          <p className="mono mt-1 text-[10px] text-[var(--dim)]">В ВАЛЮТЕ ОТОБРАЖЕНИЯ • {disp.name.toUpperCase()}</p>
+          <p className="mono mt-1 text-[10px] text-[var(--dim)]">
+            {inUnit ? `АРГСКИЙ ТО • В ЕДИНИЦАХ «${unit.label.toUpperCase()}»` : `В ВАЛЮТЕ ОТОБРАЖЕНИЯ • ${disp.name.toUpperCase()}`}
+          </p>
+
+          {inUnit && (
+            <>
+              <label className="mono mt-4 block text-[10px] tracking-[0.2em] text-[var(--dim)]">ЕДИНИЦА ОТОБРАЖЕНИЯ</label>
+              <div className="mt-1 grid grid-cols-4 gap-1">
+                {UNITS.map((u) => (
+                  <button
+                    key={u.code}
+                    onClick={() => {
+                      setDisplayUnit(user.login, u.code);
+                      toast(`Суммы в единицах «${u.label}»`, "info");
+                    }}
+                    className={`mono border py-1.5 text-[11px] transition-colors ${
+                      unit.code === u.code
+                        ? "border-[var(--gold)] bg-[rgba(212,175,55,.12)] text-[var(--gold2)]"
+                        : "border-[var(--line)] text-[var(--txt2)] hover:border-[var(--line2)] hover:text-[var(--txt)]"
+                    }`}
+                  >
+                    {u.label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
           <label className="mono mt-4 block text-[10px] tracking-[0.2em] text-[var(--dim)]">ВАЛЮТА ОТОБРАЖЕНИЯ</label>
           <select
             value={disp.code}
@@ -245,15 +303,16 @@ function DashPage({ user, onOpen }: { user: User; onOpen: (id: string) => void }
               <p className="mt-2 text-[12.5px] font-semibold text-[var(--txt)] transition-colors group-hover:text-[var(--gold2)]">
                 {ACCOUNT_TYPE_LABEL[a.type]}
               </p>
-              <p className="display mt-2 text-2xl font-extrabold text-[var(--gold2)]">{fmtMoney(a.balance, a.currency)}</p>
+              <p className="display mt-2 text-2xl font-extrabold text-[var(--gold2)]">{fmtMoney(a.balance, a.currency, unit)}</p>
               {a.type === "CREDIT" && (
                 <p className="mono mt-1 text-[10px] text-[var(--dim)]">
-                  ДОСТУПНО: {fmtMoney(availableBalance(a), a.currency)} (лимит {fmtMoney(a.creditLimit, a.currency)})
+                  ДОСТУПНО: {fmtMoney(availableBalance(a), a.currency, unit)} (лимит {fmtMoney(a.creditLimit, a.currency, unit)})
                 </p>
               )}
             </button>
           ))}
         </div>
+      </div>
       </div>
     </div>
   );
@@ -276,7 +335,7 @@ function TxLine({ tx, viewer }: { tx: BankTx; viewer: string }) {
         <p className="mono truncate text-[10px] text-[var(--dim)]">{fmtDT(tx.ts)} • {tx.desc}</p>
       </div>
       <span className={`mono shrink-0 text-[13px] font-semibold ${color}`}>
-        {sign} {cur ? fmtMoney(Math.abs(amt), cur) : "—"}
+        {sign} {cur ? fmtMoney(Math.abs(amt), cur, displayUnitOf(viewer)) : "—"}
       </span>
     </div>
   );
@@ -284,7 +343,17 @@ function TxLine({ tx, viewer }: { tx: BankTx; viewer: string }) {
 
 /* ================= перевод ================= */
 
-function TransferPage({ user, onChanged }: { user: User; onChanged: () => void }) {
+function TransferPage({
+  user,
+  onChanged,
+  prefill,
+  onPrefillUsed,
+}: {
+  user: User;
+  onChanged: () => void;
+  prefill?: QrPrefill | null;
+  onPrefillUsed?: () => void;
+}) {
   const bank = useBank();
   const my = accountsForUser(user.login).filter((a) => a.status === "ACTIVE");
   const [fromId, setFromId] = useState(my[0]?.id ?? "");
@@ -292,6 +361,16 @@ function TransferPage({ user, onChanged }: { user: User; onChanged: () => void }
   const [amount, setAmount] = useState("");
   const [desc, setDesc] = useState("");
   const [receipt, setReceipt] = useState<string | null>(null);
+
+  /* предзаполнение из QR-кода */
+  useEffect(() => {
+    if (prefill) {
+      if (prefill.toNum) setToNum(prefill.toNum);
+      if (prefill.amount) setAmount(prefill.amount);
+      if (prefill.desc) setDesc(prefill.desc);
+      onPrefillUsed?.();
+    }
+  }, [prefill]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const from = accountById(fromId);
   const prim = primaryCurrency();
@@ -374,7 +453,7 @@ function TransferPage({ user, onChanged }: { user: User; onChanged: () => void }
               value={desc}
               onChange={(e) => setDesc(e.target.value)}
               className="field mt-1"
-              placeholder={`Перевод между счетами через ${prim?.code ?? "ARY"}`}
+              placeholder={`Перевод между счетами через ${prim?.code ?? "ATO"}`}
             />
           </div>
         </div>
@@ -398,7 +477,7 @@ function TransferPage({ user, onChanged }: { user: User; onChanged: () => void }
 
       <div className="panel fadeUp h-fit p-5" style={{ animationDelay: "80ms" }}>
         <h3 className="display flex items-center gap-2 text-sm font-bold tracking-wider">
-          <IcGlobe size={15} className="text-[var(--gold)]" /> КУРСЫ К {prim?.code ?? "ARY"}
+          <IcGlobe size={15} className="text-[var(--gold)]" /> КУРСЫ К {prim?.code ?? "ATO"}
         </h3>
         <div className="goldline my-3" />
         <table className="tbl">
@@ -439,7 +518,7 @@ function TransferPage({ user, onChanged }: { user: User; onChanged: () => void }
           </tbody>
         </table>
         <p className="mono mt-3 text-[9.5px] leading-4 text-[var(--dim)]">
-          КОНВЕРТАЦИЯ ВЫПОЛНЯЕТСЯ ЧЕРЕЗ ОСНОВНУЮ ВАЛЮТУ {prim?.code ?? "ARY"}. КУРСЫ УСТАНАВЛИВАЕТ БАНК.
+          КОНВЕРТАЦИЯ ВЫПОЛНЯЕТСЯ ЧЕРЕЗ ОСНОВНУЮ ВАЛЮТУ {prim?.code ?? "ATO"}. КУРСЫ УСТАНАВЛИВАЕТ БАНК.
         </p>
       </div>
     </div>
@@ -524,7 +603,7 @@ function OpenPage({ user, onChanged }: { user: User; onChanged: () => void }) {
   const bank = useBank();
   const pendingN = pendingCountOf(user.login);
   const [type, setType] = useState<AccountType>("CHECKING");
-  const [cur, setCur] = useState(primaryCurrency()?.code ?? "ARY");
+  const [cur, setCur] = useState(primaryCurrency()?.code ?? "ATO");
   const [deposit, setDeposit] = useState("");
   const dep = Number(deposit.replace(",", "."));
 
@@ -675,15 +754,15 @@ function DetailPage({ acc, user, onBack }: { acc: BankAccount; user: User; onBac
             </div>
             <p className="mt-2 text-[13px] font-semibold">{ACCOUNT_TYPE_LABEL[acc.type]}</p>
             <p className="mono text-[10px] text-[var(--dim)]">ВЛАДЕЛЕЦ: {ownerName(acc).toUpperCase()}</p>
-            <p className="display mt-4 text-4xl font-extrabold text-[var(--gold2)]">{fmtMoney(acc.balance, acc.currency)}</p>
+            <p className="display mt-4 text-4xl font-extrabold text-[var(--gold2)]">{fmtMoney(acc.balance, acc.currency, displayUnitOf(user.login))}</p>
             {convDisp !== null && (
               <p className="mono mt-1 text-[10.5px] text-[var(--txt2)]">
-                ≈ {fmtMoney(convDisp, disp.code)} • курс {rateToDisp?.toLocaleString("ru-RU", { maximumFractionDigits: 6 })}
+                ≈ {fmtMoney(convDisp, disp.code, displayUnitOf(user.login))} • курс {rateToDisp?.toLocaleString("ru-RU", { maximumFractionDigits: 6 })}
               </p>
             )}
             {acc.type === "CREDIT" && (
               <p className="mono mt-2 text-[10.5px] text-[var(--dim)]">
-                ДОСТУПНО: {fmtMoney(availableBalance(acc), acc.currency)} • ЛИМИТ {fmtMoney(acc.creditLimit, acc.currency)}
+                ДОСТУПНО: {fmtMoney(availableBalance(acc), acc.currency, displayUnitOf(user.login))} • ЛИМИТ {fmtMoney(acc.creditLimit, acc.currency, displayUnitOf(user.login))}
               </p>
             )}
             {acc.interestRate > 0 && (
@@ -871,7 +950,7 @@ function GovPage({ onChanged }: { onChanged: () => void }) {
   const bank = useBank();
   const [type, setType] = useState<AccountType>("GOVERNMENT");
   const [name, setName] = useState("");
-  const [cur, setCur] = useState(primaryCurrency()?.code ?? "ARY");
+  const [cur, setCur] = useState(primaryCurrency()?.code ?? "ATO");
   const [balance, setBalance] = useState("");
   const [desc, setDesc] = useState("");
   const govAccs = bank.accounts.filter((a) => a.user === null && a.status !== "CLOSED");

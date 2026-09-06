@@ -2,9 +2,12 @@ import { useSyncExternalStore } from "react";
 import { getDB, addLog } from "./db";
 
 /* ============================================================
-   StatusBanko • Argian Nazional Bank V1.6 — модель данных.
+   StatusBanko • Argian Nazional Bank V1.7 — модель данных.
    Повторяет Django-модели BankProject (models.py):
    Currency, ExchangeRate, TransactionType, Account, Transaction.
+   V1.7: денежная реформа — государственная валюта Аргский То (АТО);
+   дробные части: 1 То = 1000 ки, 100 То = 1 Сэн, 1000 Сэн = 1 Рэн.
+   Аргские Йены (ARY) изъяты из обращения.
    Боевой контур: отдельная БД Django-проекта банка (sb.arg:8001).
    ============================================================ */
 
@@ -86,10 +89,28 @@ export const GOV_TYPES: AccountType[] = ["GOVERNMENT", "RESERVE", "TREASURY", "T
 
 export interface BankProfile {
   display?: string; // валюта отображения
+  unit?: string; // единица отображения Аргского То: ki / to / sen / ren
   phone?: string;
   email?: string;
   address?: string;
 }
+
+/* ---------- денежная реформа: Аргский То и его части ---------- */
+
+/** Единицы Аргского То: 1 То = 1000 ки; 100 То = 1 Сэн; 1000 Сэн = 1 Рэн. */
+export interface Unit {
+  code: "ki" | "to" | "sen" | "ren";
+  label: string;
+  to: number; // сколько То в одной единице
+}
+export const UNITS: Unit[] = [
+  { code: "ki", label: "ки", to: 0.001 },
+  { code: "to", label: "То", to: 1 },
+  { code: "sen", label: "Сэн", to: 100 },
+  { code: "ren", label: "Рэн", to: 100_000 },
+];
+export const UNIT_BY_CODE = (c: string): Unit => UNITS.find((u) => u.code === c) ?? UNITS[1];
+export const UNIT_LEGEND = "1 То = 1000 ки • 100 То = 1 Сэн • 1000 Сэн = 1 Рэн";
 interface BankDB {
   v: number;
   currencies: Currency[];
@@ -100,7 +121,7 @@ interface BankDB {
   prefs: Record<string, BankProfile>;
 }
 
-const KEY = "argnet-bank-v1";
+const KEY = "argnet-bank-v2";
 const NOW = Date.now();
 const D = 86_400_000;
 
@@ -157,16 +178,16 @@ function seed(): BankDB {
   return {
     v: 1,
     currencies: [
-      { code: "ARY", name: "Аргские Йены", symbol: "¥", primary: true, active: true },
+      { code: "ATO", name: "Аргский То", symbol: "То", primary: true, active: true },
       { code: "RUB", name: "Рубли", symbol: "₽", primary: false, active: true },
       { code: "USD", name: "Доллары США", symbol: "$", primary: false, active: true },
       { code: "EUR", name: "Евро", symbol: "€", primary: false, active: true },
     ],
     rates: [
-      { from: "ARY", to: "RUB", rate: 0.03, active: true },
-      { from: "RUB", to: "ARY", rate: 33.33, active: true },
-      { from: "ARY", to: "USD", rate: 0.01, active: true },
-      { from: "USD", to: "ARY", rate: 100, active: true },
+      { from: "ATO", to: "RUB", rate: 0.03, active: true },
+      { from: "RUB", to: "ATO", rate: 33.33, active: true },
+      { from: "ATO", to: "USD", rate: 0.01, active: true },
+      { from: "USD", to: "ATO", rate: 100, active: true },
     ],
     txTypes: [
       { code: "TRANSFER", name: "Перевод", positive: false, active: true },
@@ -272,8 +293,20 @@ export function convert(amount: number, from: string, to: string): number | null
 
 /* ---------- счета ---------- */
 
-export const fmtMoney = (n: number, code: string) =>
-  `${n.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} ${currency(code)?.symbol ?? code}`;
+/**
+ * Форматирование суммы. Для Аргского То применяется единица отображения
+ * (ки/То/Сэн/Рэн), если она передана или выбрана в профиле.
+ */
+export const fmtMoney = (n: number, code: string, unit?: Unit) => {
+  const cur = currency(code);
+  const prim = primaryCurrency();
+  if (cur && prim && cur.code === prim.code) {
+    const u = unit ?? UNITS[1];
+    const v = n / u.to;
+    return `${v.toLocaleString("ru-RU", { maximumFractionDigits: u.code === "ki" ? 0 : 2 })} ${u.label}`;
+  }
+  return `${n.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} ${cur?.symbol ?? code}`;
+};
 
 export function availableBalance(a: BankAccount): number {
   return a.type === "CREDIT" ? a.balance + a.creditLimit : a.balance;
@@ -635,6 +668,16 @@ export function setDisplayCurrency(login: string, code: string): string | null {
     db.prefs[login] = { ...(db.prefs[login] ?? {}), display: code };
   });
   return null;
+}
+
+/** Единица отображения Аргского То для подданного. */
+export function displayUnitOf(login: string): Unit {
+  return UNIT_BY_CODE(profileOf(login).unit ?? "to");
+}
+export function setDisplayUnit(login: string, unit: Unit["code"]): void {
+  mutate((db) => {
+    db.prefs[login] = { ...(db.prefs[login] ?? {}), unit };
+  });
 }
 
 export function saveProfile(login: string, patch: Omit<BankProfile, "display">) {
