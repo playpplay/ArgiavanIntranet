@@ -111,6 +111,12 @@ export const UNITS: Unit[] = [
 ];
 export const UNIT_BY_CODE = (c: string): Unit => UNITS.find((u) => u.code === c) ?? UNITS[1];
 export const UNIT_LEGEND = "1 То = 1000 ки • 100 То = 1 Сэн • 1000 Сэн = 1 Рэн";
+
+/** Налоговое правило для типа операции: ставка % и счёт, куда уходит разница. */
+export interface TaxRule {
+  ratePct: number; // 0–100
+  dest: string | null; // id счёта-получателя налога
+}
 interface BankDB {
   v: number;
   currencies: Currency[];
@@ -119,9 +125,10 @@ interface BankDB {
   accounts: BankAccount[];
   txs: BankTx[];
   prefs: Record<string, BankProfile>;
+  taxRules: Record<string, TaxRule>;
 }
 
-const KEY = "argnet-bank-v2";
+const KEY = "argnet-bank-v3";
 const NOW = Date.now();
 const D = 86_400_000;
 
@@ -159,18 +166,18 @@ function seed(): BankDB {
     ...extra,
   });
 
-  const treasury = acc(null, "TREASURY", "ARY", 12_500_000, {
+  const treasury = acc(null, "TREASURY", "ATO", 12_500_000, {
     accountName: "Казначейство Империи Аргия",
     description: "Единый казначейский счёт государственных средств.",
   });
-  const taxAcc = acc(null, "TAX", "ARY", 480_000, {
+  const taxAcc = acc(null, "TAX", "ATO", 480_000, {
     accountName: "Налоговый счёт Короны",
     description: "Поступление податей и сборов.",
   });
-  const krolAcc = krol ? acc(krol.login, "CHECKING", "ARY", 25_000) : null;
-  const bankAcc = bank ? acc(bank.login, "CHECKING", "ARY", 1_900_000) : null;
+  const krolAcc = krol ? acc(krol.login, "CHECKING", "ATO", 25_000) : null;
+  const bankAcc = bank ? acc(bank.login, "CHECKING", "ATO", 1_900_000) : null;
   const citAccs = citizens.map((c, i) =>
-    acc(c.login, i % 2 ? "SAVINGS" : "CHECKING", "ARY", 3_500 + i * 1_250)
+    acc(c.login, i % 2 ? "SAVINGS" : "CHECKING", "ATO", 3_500 + i * 1_250)
   );
 
   const accounts = [treasury, taxAcc, ...(krolAcc ? [krolAcc] : []), ...(bankAcc ? [bankAcc] : []), ...citAccs];
@@ -191,6 +198,7 @@ function seed(): BankDB {
     ],
     txTypes: [
       { code: "TRANSFER", name: "Перевод", positive: false, active: true },
+      { code: "PAY", name: "Оплата (товары/услуги)", positive: false, active: true },
       { code: "DEPOSIT", name: "Пополнение", positive: true, active: true },
       { code: "WITHDRAWAL", name: "Снятие", positive: false, active: true },
       { code: "TAX_DEDUCTION", name: "Налоговый вычет", positive: false, active: true },
@@ -200,6 +208,17 @@ function seed(): BankDB {
     accounts,
     txs: [],
     prefs: {},
+    taxRules: {
+      // По закону переводы между счетами налогом не облагаются (0%).
+      TRANSFER: { ratePct: 0, dest: taxAcc.id },
+      // Оплаты за товары/услуги облагаются; разница уходит на налоговый счёт Короны.
+      PAY: { ratePct: 5, dest: taxAcc.id },
+      DEPOSIT: { ratePct: 0, dest: taxAcc.id },
+      WITHDRAWAL: { ratePct: 0, dest: taxAcc.id },
+      TAX_DEDUCTION: { ratePct: 0, dest: taxAcc.id },
+      FEE: { ratePct: 0, dest: taxAcc.id },
+      INTEREST: { ratePct: 0, dest: taxAcc.id },
+    },
   };
 }
 
@@ -226,6 +245,7 @@ function load(): BankDB {
       const p = JSON.parse(raw) as BankDB;
       if (p && Array.isArray(p.accounts)) {
         if (!p.prefs) p.prefs = {};
+        if (!p.taxRules) p.taxRules = {};
         return p;
       }
     }
@@ -549,51 +569,104 @@ function recordTx(
   mutate((db) => db.txs.unshift(tx));
 }
 
-/** Перевод между счетами (с конвертацией валют по курсу банка). */
+/* ---------- налоговые правила ---------- */
+
+export function getTaxRule(type: string): TaxRule {
+  return getBank().taxRules[type] ?? { ratePct: 0, dest: null };
+}
+export function setTaxRule(type: string, rule: TaxRule) {
+  const pct = Math.min(100, Math.max(0, Number(rule.ratePct) || 0));
+  mutate((db) => {
+    db.taxRules[type] = { ratePct: pct, dest: rule.dest };
+  });
+  addLog(`StatusBanko: правило «${txTypeName(type)}» → ${pct}%${rule.dest ? " (счёт-получатель назначен)" : ""}`);
+}
+
+/**
+ * Единый механизм движения средств с удержанием налога.
+ * Налог = gross × ratePct/100 удерживается и зачисляется на счёт из правила,
+ * поэтому средства не «исчезают» — сохраняется баланс в выписке.
+ * Переводы (TRANSFER) по закону идут со ставкой 0%.
+ */
+function moveMoney(d: { fromId: string; toId: string; gross: number; type: string; desc: string }): { err?: string; tx?: BankTx } {
+  const from = accountById(d.fromId);
+  if (!from) return { err: "Счёт отправителя не найден" };
+  if (from.status !== "ACTIVE") return { err: `Счёт отправителя в статусе «${ACCOUNT_STATUS_LABEL[from.status]}»` };
+  const to = accountById(d.toId);
+  if (!to) return { err: "Счёт получателя не найден" };
+  if (to.id === from.id) return { err: "Нельзя направить средства на тот же счёт" };
+  if (to.status === "CLOSED") return { err: "Счёт получателя закрыт" };
+  if (to.status === "FROZEN") return { err: "Счёт получателя заморожен" };
+  if (!(d.gross > 0)) return { err: "Сумма должна быть положительной" };
+  if (availableBalance(from) < d.gross) return { err: "Недостаточно средств на счёте" };
+
+  const rate = from.currency === to.currency ? 1 : getRate(from.currency, to.currency);
+  if (rate === null) return { err: `Нет курса ${from.currency} → ${to.currency}` };
+  const credited = d.gross * rate; // в валюте получателя
+
+  const rule = getTaxRule(d.type);
+  const taxPct = rule.ratePct;
+  const taxInTo = taxPct > 0 ? (credited * taxPct) / 100 : 0;
+  const net = credited - taxInTo;
+
+  const dest = rule.dest ? accountById(rule.dest) : null;
+  if (taxInTo > 1e-12 && !dest)
+    return { err: `Для типа «${txTypeName(d.type)}» настроен налог, но не указан счёт-получатель` };
+  const taxRate = !dest || to.currency === dest.currency ? 1 : getRate(to.currency, dest.currency);
+  if (taxInTo > 1e-12 && taxRate === null) return { err: "Нет курса для зачисления налога" };
+  const taxInDest = taxInTo * (taxRate ?? 1);
+
+  mutate((db) => {
+    const f = db.accounts.find((x) => x.id === from.id);
+    const t = db.accounts.find((x) => x.id === to.id);
+    if (f) f.balance -= d.gross;
+    if (t) t.balance += net;
+    if (taxInTo > 1e-12 && dest) {
+      const dd = db.accounts.find((x) => x.id === dest.id);
+      if (dd) dd.balance += taxInDest;
+    }
+  });
+
+  const tx: BankTx = {
+    id: uid(),
+    from: from.id,
+    to: to.id,
+    type: d.type,
+    amount: net,
+    originalAmount: d.gross,
+    rate,
+    desc: d.desc.trim() || `${txTypeName(d.type)} по счёту ${to.number.slice(0, 4)}…`,
+    ts: Date.now(),
+    completed: true,
+  };
+  mutate((db) => db.txs.unshift(tx));
+
+  if (taxInTo > 1e-12 && dest) {
+    recordTx(from.id, dest.id, "TAX_DEDUCTION", taxInDest, (d.gross * taxPct) / 100, taxRate, `Налог ${taxPct}% (${txTypeName(d.type)})`);
+  }
+
+  addLog(
+    `StatusBanko: ${txTypeName(d.type)} ${fmtMoney(d.gross, from.currency)} → ${to.number.slice(0, 4)}…${to.number.slice(-4)}` +
+      (taxInTo > 1e-12 && dest ? ` • налог ${fmtMoney(taxInDest, dest.currency)}` : "")
+  );
+  return { tx };
+}
+
+/** Перевод между счетами по номеру кошелька. Налогом не облагается (0% по закону). */
 export function transfer(d: {
   fromId: string;
   toNumber: string;
   amount: number;
   desc: string;
 }): { err?: string; tx?: BankTx } {
-  const from = accountById(d.fromId);
-  if (!from) return { err: "Счёт отправителя не найден" };
-  if (from.status !== "ACTIVE") return { err: `Счёт отправителя в статусе «${ACCOUNT_STATUS_LABEL[from.status]}»` };
   const to = accountByNumber(d.toNumber);
   if (!to) return { err: "Счёт получателя по номеру не найден" };
-  if (to.id === from.id) return { err: "Нельзя перевести на тот же счёт" };
-  if (to.status === "CLOSED") return { err: "Счёт получателя закрыт" };
-  if (to.status === "FROZEN") return { err: "Счёт получателя заморожен" };
-  if (!(d.amount > 0)) return { err: "Сумма должна быть положительной" };
-  if (availableBalance(from) < d.amount) return { err: "Недостаточно средств на счёте" };
+  return moveMoney({ fromId: d.fromId, toId: to.id, gross: d.amount, type: "TRANSFER", desc: d.desc });
+}
 
-  const rate = from.currency === to.currency ? null : getRate(from.currency, to.currency);
-  if (rate === null) return { err: `Нет курса ${from.currency} → ${to.currency}` };
-  const credited = rate === null ? d.amount : d.amount * rate;
-
-  mutate((db) => {
-    const f = db.accounts.find((x) => x.id === from.id);
-    const t = db.accounts.find((x) => x.id === to.id);
-    if (f) f.balance -= d.amount;
-    if (t) t.balance += credited;
-  });
-  const tx: BankTx = {
-    id: uid(),
-    from: from.id,
-    to: to.id,
-    type: "TRANSFER",
-    amount: credited,
-    originalAmount: d.amount,
-    rate,
-    desc: d.desc.trim() || `Перевод между счетами через ${primaryCurrency()?.code ?? "ARY"}`,
-    ts: Date.now(),
-    completed: true,
-  };
-  mutate((db) => {
-    db.txs.unshift(tx);
-  });
-  addLog(`StatusBanko: перевод ${fmtMoney(d.amount, from.currency)} → счёт ${to.number.slice(0, 4)}…${to.number.slice(-4)}`);
-  return { tx };
+/** Оплата товаров/услуг у юридического лица. Облагается налогом типа PAY. */
+export function pay(d: { fromId: string; toId: string; amount: number; desc: string }): { err?: string; tx?: BankTx } {
+  return moveMoney({ fromId: d.fromId, toId: d.toId, gross: d.amount, type: "PAY", desc: d.desc });
 }
 
 /** Уплата подати: списание на налоговый счёт Короны. */

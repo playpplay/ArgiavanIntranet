@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useDB, fmtDT, roleLabel, toast, type User } from "../../lib/db";
 import {
   useBank,
@@ -14,7 +14,9 @@ import {
   decideAccount,
   displayCurrencyOf,
   fmtMoney,
+  getBank,
   getRate,
+  getTaxRule,
   isBankOfficer,
   openAccount,
   ownerName,
@@ -28,6 +30,7 @@ import {
   setDisplayUnit,
   displayUnitOf,
   setFrozen,
+  setTaxRule,
   UNITS,
   UNIT_LEGEND,
   transfer,
@@ -41,7 +44,7 @@ import {
   type BankTx,
 } from "../../lib/bank";
 import { IcArrowL, IcCheck, IcClock, IcDoc, IcGlobe, IcPlus, IcSend, IcUsers, IcX } from "../../lib/icons";
-import QrPage, { type QrPrefill } from "./bank/QrPage";
+import QrPage from "./bank/QrPage";
 
 type Page =
   | "dash"
@@ -54,7 +57,8 @@ type Page =
   | "profile"
   | "approve"
   | "gov"
-  | "credit";
+  | "credit"
+  | "tax";
 
 const fmtNum = (n: string) => n.replace(/(.{4})/g, "$1 ").trim();
 const statusChip = (s: BankAccount["status"]) =>
@@ -66,13 +70,12 @@ export default function BankSite({ user }: { user: User }) {
   const [page, setPage] = useState<Page>("dash");
   const [detailId, setDetailId] = useState<string | null>(null);
   const [toastKey, setToastKey] = useState(0);
-  const [qrPrefill, setQrPrefill] = useState<QrPrefill | null>(null);
   const refresh = () => setToastKey((k) => k + 1);
 
   const NAV: Array<{ id: Page; label: string; admin?: boolean }> = [
     { id: "dash", label: "Кабинет" },
-    { id: "transfer", label: "Перевод" },
-    { id: "qr", label: "QR-перевод" },
+    { id: "transfer", label: "Перевод (по номеру)" },
+    { id: "qr", label: "QR-оплата" },
     { id: "txs", label: "Операции" },
     { id: "rates", label: "Курсы" },
     { id: "open", label: "Новый счёт" },
@@ -81,6 +84,7 @@ export default function BankSite({ user }: { user: User }) {
     { id: "approve", label: "Утверждение", admin: true },
     { id: "gov", label: "Госсчета", admin: true },
     { id: "credit", label: "Касса", admin: true },
+    { id: "tax", label: "Налоговые правила", admin: true },
   ];
 
   const detail = detailId ? accountById(detailId) : undefined;
@@ -129,17 +133,9 @@ export default function BankSite({ user }: { user: User }) {
         ) : page === "dash" ? (
           <DashPage user={user} onOpen={(id) => setDetailId(id)} />
         ) : page === "transfer" ? (
-          <TransferPage user={user} onChanged={refresh} prefill={qrPrefill} onPrefillUsed={() => setQrPrefill(null)} />
+          <TransferPage user={user} onChanged={refresh} />
         ) : page === "qr" ? (
-          <QrPage
-            user={user}
-            onPay={(p) => {
-              setQrPrefill(p);
-              setDetailId(null);
-              setPage("transfer");
-              toast("Платёжный код распознан — проверьте детали перевода", "info");
-            }}
-          />
+          <QrPage user={user} />
         ) : page === "txs" ? (
           <TxsPage user={user} />
         ) : page === "rates" ? (
@@ -156,6 +152,8 @@ export default function BankSite({ user }: { user: User }) {
           <GovPage onChanged={refresh} />
         ) : page === "credit" && officer ? (
           <CreditPage onChanged={refresh} />
+        ) : page === "tax" && officer ? (
+          <TaxRulesPage onChanged={refresh} />
         ) : null}
       </div>
 
@@ -346,13 +344,9 @@ function TxLine({ tx, viewer }: { tx: BankTx; viewer: string }) {
 function TransferPage({
   user,
   onChanged,
-  prefill,
-  onPrefillUsed,
 }: {
   user: User;
   onChanged: () => void;
-  prefill?: QrPrefill | null;
-  onPrefillUsed?: () => void;
 }) {
   const bank = useBank();
   const my = accountsForUser(user.login).filter((a) => a.status === "ACTIVE");
@@ -361,16 +355,6 @@ function TransferPage({
   const [amount, setAmount] = useState("");
   const [desc, setDesc] = useState("");
   const [receipt, setReceipt] = useState<string | null>(null);
-
-  /* предзаполнение из QR-кода */
-  useEffect(() => {
-    if (prefill) {
-      if (prefill.toNum) setToNum(prefill.toNum);
-      if (prefill.amount) setAmount(prefill.amount);
-      if (prefill.desc) setDesc(prefill.desc);
-      onPrefillUsed?.();
-    }
-  }, [prefill]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const from = accountById(fromId);
   const prim = primaryCurrency();
@@ -1219,6 +1203,91 @@ function ProfilePage({ user }: { user: User }) {
         <input value={address} onChange={(e) => setAddress(e.target.value)} className="field mt-1" placeholder="Префектура, улица, дом" />
         <button className="btn btn-gold mt-4 w-full">Сохранить</button>
       </form>
+    </div>
+  );
+}
+
+/* ================= налоговые правила (Корона/банк) ================= */
+
+function TaxRulesPage({ onChanged }: { onChanged: () => void }) {
+  const bank = useBank();
+  const accounts = getBank().accounts.filter((a) => a.status !== "CLOSED");
+
+  const update = (type: string, patch: Partial<{ ratePct: number; dest: string | null }>) => {
+    const cur = getTaxRule(type);
+    setTaxRule(type, { ratePct: cur.ratePct, dest: cur.dest, ...patch });
+    onChanged();
+  };
+
+  return (
+    <div>
+      <div className="fadeUp mb-4 border-l-2 border-[var(--gold)] bg-[rgba(212,175,55,.06)] px-4 py-3">
+        <p className="mono text-[10px] tracking-[0.25em] text-[var(--gold2)]">НАЛОГОВЫЕ ПРАВИЛА ОПЕРАЦИЙ</p>
+        <p className="mt-1 text-[12.5px] leading-relaxed text-[var(--txt2)]">
+          Для каждого типа операции задаётся ставка и счёт, куда зачисляется удержанная разница — по закону
+          средства не могут «исчезать». <span className="text-[var(--txt)]">Переводы по закону не облагаются</span>{" "}
+          (ставка 0%). Оплаты (PAY) облагаются по настроенной ставке.
+        </p>
+      </div>
+
+      <div className="panel fadeUp overflow-x-auto">
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th>Тип операции</th>
+              <th className="w-36">Ставка, %</th>
+              <th>Счёт-получатель налога</th>
+            </tr>
+          </thead>
+          <tbody>
+            {bank.txTypes.map((t) => {
+              const rule = getTaxRule(t.code);
+              const isTransfer = t.code === "TRANSFER";
+              return (
+                <tr key={t.code}>
+                  <td>
+                    <span className="font-semibold text-[var(--txt)]">{t.name}</span>
+                    <span className="mono ml-2 text-[9.5px] text-[var(--dim)]">{t.code}</span>
+                    {isTransfer && (
+                      <span className="chip chip-gold ml-2">по закону 0%</span>
+                    )}
+                  </td>
+                  <td>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={0.5}
+                      value={rule.ratePct}
+                      onChange={(e) => update(t.code, { ratePct: Number(e.target.value) })}
+                      className="field mono w-24"
+                    />
+                  </td>
+                  <td>
+                    <select
+                      value={rule.dest ?? ""}
+                      onChange={(e) => update(t.code, { dest: e.target.value || null })}
+                      className="field"
+                    >
+                      <option value="">— не удерживать —</option>
+                      {accounts.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.accountName ? `${a.accountName} (${a.number.slice(0, 4)}…)` : `${ownerName(a)} • ${a.number.slice(0, 4)}…`}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <p className="mono mt-3 text-[9.5px] leading-4 text-[var(--dim)]">
+        ИЗМЕНЕНИЯ ВСТУПАЮТ В СИЛУ НЕМЕДЛЕННО И ФИКСИРУЮТСЯ В ЖУРНАЛЕ АУДИТА. ЕСЛИ ДЛЯ ТИПА СО СТАВКОЙ &gt;0 НЕ
+        ВЫБРАН СЧЁТ-ПОЛУЧАТЕЛЬ, ОПЕРАЦИЯ БУДЕТ ОТКЛОНЕНА БАНКОМ.
+      </p>
     </div>
   );
 }
