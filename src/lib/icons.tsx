@@ -280,7 +280,7 @@ export const IcStamp = (p: P) => (
   </S>
 );
 
-/* ---------- Малый государственный герб Аргского Королевства ---------- */
+/* ---------- Малый государственный герб Аргской Империи ---------- */
 
 export const Emblem = ({ size = 120, className }: { size?: number; className?: string }) => (
   <svg viewBox="0 0 120 132" width={size} height={(size * 132) / 120} className={className} fill="none" aria-hidden="true">

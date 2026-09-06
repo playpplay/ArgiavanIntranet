@@ -80,7 +80,7 @@ export default function PostSite({ user }: { user: User }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="display text-2xl font-extrabold tracking-wide">
-            КЭП — КОРОЛЕВСКАЯ <span className="text-[var(--gold)]">ЭЛЕКТРОННАЯ ПОЧТА</span>
+            КЭП — ИМПЕРАТОРСКАЯ <span className="text-[var(--gold)]">ЭЛЕКТРОННАЯ ПОЧТА</span>
           </h1>
           <p className="mono mt-1 text-[10px] tracking-[0.22em] text-[var(--dim)]">
             POST.ARG • ПОРТ 8003 • ЯЩИК: {user.itirinio}

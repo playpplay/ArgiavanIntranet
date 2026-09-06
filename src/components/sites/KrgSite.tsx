@@ -184,14 +184,14 @@ export default function KrgSite({ user, nav, mirror }: { user: User; nav: (h: st
           <div className="panel p-5">
             <div className="flex items-center gap-2">
               <IcCrown size={18} className="text-[var(--gold)]" />
-              <h3 className="display text-sm font-bold tracking-wider">УКАЗ ДНЯ</h3>
+              <h3 className="display text-sm font-bold tracking-wider">МАНИФЕСТ ДНЯ</h3>
             </div>
-            <p className="mt-3 text-sm font-semibold">№ 24 — об административно-территориальном делении</p>
+            <p className="mt-3 text-sm font-semibold">О провозглашении Аргской Империи</p>
             <p className="mt-1.5 text-xs leading-relaxed text-[var(--txt2)]">
-              Префектурам присвоены коды 00–06, применяемые в номерах ГИКС. Провинция Катэ управляется
-              напрямую Короной.
+              Государство преобразовано в Империю; все прежние королевские наименования в ЕГИКС заменяются
+              имперскими. Исторические аббревиатуры служб (ГИКС, КЭП) сохранены.
             </p>
-            <p className="mono mt-3 text-[10px] tracking-[0.18em] text-[var(--dim)]">ОСНОВАНИЕ: ROTTO, СТ. 85, 89</p>
+            <p className="mono mt-3 text-[10px] tracking-[0.18em] text-[var(--dim)]">Е.И.В. ИМПЕРАТОР АРГОЛЬД IV • ПОДПИСАНО ПЕЧАТЬЮ</p>
           </div>
 
           <div className="panel p-5">
@@ -217,7 +217,7 @@ export default function KrgSite({ user, nav, mirror }: { user: User; nav: (h: st
       </div>
 
       <div className="mono mt-10 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--line)] pt-4 text-[9.5px] tracking-[0.2em] text-[var(--dim)]">
-        <span>ЕГИКС ARG-NET • СОБСТВЕННОСТЬ АРГСКОГО КОРОЛЕВСТВА</span>
+        <span>ЕГИКС ARG-NET • СОБСТВЕННОСТЬ АРГСКОЙ ИМПЕРИИ</span>
         <span>СЕАНС: {user.itirinio} • ПРОТОТИП (ДАННЫЕ В БРАУЗЕРЕ)</span>
       </div>
     </div>

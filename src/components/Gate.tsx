@@ -10,7 +10,7 @@ const STEPS = [
 ];
 
 const DEMO: Array<{ it: string; pass: string; role: string }> = [
-  { it: "A-000-001", pass: "arg-root", role: "Верховный Администратор (Корона)" },
+  { it: "A-000-001", pass: "arg-root", role: "Верховный Администратор (Император)" },
   { it: "A-000-010", pass: "arg-tech", role: "Технический специалист ГНИЦСТ" },
   { it: "A-000-017", pass: "arg-mod", role: "Модератор Стражи" },
   { it: "A-000-021", pass: "arg-op", role: "Оператор Коллегии" },
@@ -231,7 +231,7 @@ export default function Gate({ onLogin }: { onLogin: (u: User) => void }) {
       </div>
 
       <div className="mono mt-6 text-center text-[9.5px] leading-5 tracking-[0.22em] text-[var(--dim)]">
-        СОБСТВЕННОСТЬ АРГСКОГО КОРОЛЕВСТВА • СТ. 123 ROTTO • РАЗРАБОТЧИК: KOSTOSĘRIO DĘ ARCANUM (ГНИЦСТ)
+        СОБСТВЕННОСТЬ АРГСКОЙ ИМПЕРИИ • СТ. 123 ROTTO • РАЗРАБОТЧИК: KOSTOSĘRIO DĘ ARCANUM (ГНИЦСТ)
       </div>
     </div>
   );

@@ -190,7 +190,7 @@ export default function Browser({ user, onLogout }: { user: User; onLogout: () =
           <div className="mono hidden items-center gap-2 text-[10px] text-[var(--txt2)] lg:flex">
             <Emblem size={26} />
             <div className="leading-tight">
-              <div className="font-semibold text-[var(--gold2)]">{user.role === "root" ? "Е.В. " : "гр. "}{user.name}</div>
+              <div className="font-semibold text-[var(--gold2)]">{user.role === "root" ? "Е.И.В. " : "гр. "}{user.name}</div>
               <div className="text-[9px] text-[var(--dim)]">{ROLE_LABEL[user.role]} • ГиКС {user.giks}</div>
             </div>
           </div>
