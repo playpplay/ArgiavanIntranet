@@ -1,78 +1,42 @@
 import { useSyncExternalStore } from "react";
 
 /* ============================================================
-   ARG-Net • ЕГИКС — локальное хранилище прототипа.
-   В боевом контуре заменяется на Django REST API (см. api.ts).
+   ЕГИКС ARG-NET • единый реестр (прототип, localStorage).
+   Боевой контур: Django + PostgreSQL, эндпоинты — см. api.ts
    ============================================================ */
 
-export type Role = "root" | "tech" | "moderator" | "operator" | "user";
-export type UserKind = "citizen" | "legal";
-export type Tld = "arg" | "anct";
-export type SiteKind =
-  | "portal"
-  | "mail"
-  | "voip"
-  | "bank"
-  | "admin"
-  | "monitor"
-  | "agency"
-  | "service"
-  | "stub";
-
-export const ROLE_LABEL: Record<Role, string> = {
-  root: "Верховный Администратор",
-  tech: "Технический специалист",
-  moderator: "Модератор",
-  operator: "Оператор Коллегии",
-  user: "Ťivitano",
-};
-
-export const PREFECTURES: Array<{ code: string; name: string }> = [
-  { code: "00", name: "Столица Йент (Ient)" },
-  { code: "01", name: "Префектура Наго (Nago, пров. Тоно)" },
-  { code: "02", name: "Префектура Накио (Nakio, пров. Тоно)" },
-  { code: "03", name: "Префектура Ярикава (Yarikawa, пров. Мино)" },
-  { code: "04", name: "Префектура Кагиото (Kagioto, пров. Мино)" },
-  { code: "05", name: "Префектура Канаканэ (Kanakane, пров. Мино)" },
-  { code: "06", name: "Провинция Катэ (Kate)" },
-  { code: "99", name: "Служебные коды" },
-];
-
-export const GIKS_PREFIX: Record<string, string> = {
-  "12": "Государственные органы",
-  "17": "Граждане (Ťivitano)",
-  "23": "Юридические лица",
-  "24": "Силовые структуры",
-  "99": "Технические",
-};
+export type Role = "root" | "tech" | "moderator" | "operator" | "citizen" | "legal";
+export type SiteKind = "portal" | "mail" | "voip" | "admin" | "bank" | "service" | "reserved";
 
 export interface User {
   login: string;
-  itirinio: string;
+  itirinio: string; // номер паспорта: 000000000000-000000000000
   name: string;
   password: string;
   role: Role;
-  kind: UserKind;
-  giks: string;
-  pref: string;
-  balance: number;
+  giks: string; // номер внутренней телефонии ГиКС
+  pref: string; // код префектуры (Указ №24)
   blocked: boolean;
   createdAt: number;
 }
-
+export interface Zone {
+  tld: string;
+  desc: string;
+  createdAt: number;
+  system?: boolean;
+}
 export interface Domain {
   name: string;
-  tld: Tld;
+  tld: string;
   kind: SiteKind;
-  owner: string;
+  owner: string; // login владельца
   desc: string;
   port: number;
-  agency?: "kustos" | "kustodia" | "ante";
-  mirror?: boolean;
-  system?: boolean;
+  hosted: boolean; // true — служба на узле поднята; false — адрес выделен, службы нет
   createdAt: number;
+  system?: boolean;
+  mirror?: boolean;
 }
-
 export interface EmailMsg {
   id: string;
   from: string;
@@ -90,70 +54,70 @@ export interface CallRec {
   to: string;
   ts: number;
   duration: number;
-  status: "ok" | "missed" | "declined";
-}
-export interface LogEntry {
-  ts: number;
-  text: string;
-}
-export interface NewsItem {
-  id: string;
-  title: string;
-  date: string;
-  tag: string;
-  lead: string;
-  text: string;
-}
-export interface Complaint {
-  id: string;
-  from: string;
-  subject: string;
-  text: string;
-  ts: number;
-  status: "open" | "resolved" | "dismissed";
+  status: "ok" | "missed" | "declined" | "noanswer";
 }
 export interface Tx {
   id: string;
   from: string;
   to: string;
   amount: number;
-  note: string;
+  purpose: string;
   ts: number;
+}
+export interface LogEntry {
+  ts: number;
+  text: string;
 }
 export interface DB {
   v: number;
   users: User[];
+  zones: Zone[];
   domains: Domain[];
   emails: EmailMsg[];
   calls: CallRec[];
+  txs: Tx[];
   log: LogEntry[];
-  news: NewsItem[];
-  complaints: Complaint[];
-  tx: Tx[];
 }
 
+export const ROLE_LABEL: Record<Role, string> = {
+  root: "Верховный Администратор",
+  tech: "Технический специалист",
+  moderator: "Модератор",
+  operator: "Оператор Коллегии",
+  citizen: "Ťivitano",
+  legal: "Юридическое лицо",
+};
+
 export const KIND_LABEL: Record<SiteKind, string> = {
-  portal: "Портал Коллегий",
-  mail: "КЭП — почта",
-  voip: "ГИКС — телефония",
-  bank: "StatusBanko",
-  admin: "Канцелярия Дворца",
-  monitor: "ГНИЦСТ — мониторинг",
-  agency: "Ведомственный узел",
+  portal: "Портал",
+  mail: "Почта (КЭП)",
+  voip: "Телефония (ГИКС)",
+  admin: "Канцелярия",
+  bank: "Банк (StatusBanko)",
   service: "Служебный узел",
-  stub: "Резерв",
+  reserved: "Домен выделен",
 };
+
 export const KIND_LETTER: Record<SiteKind, string> = {
-  portal: "К",
-  mail: "П",
-  voip: "Г",
+  portal: "П",
+  mail: "М",
+  voip: "Т",
+  admin: "У",
   bank: "Б",
-  admin: "Д",
-  monitor: "Ц",
-  agency: "В",
   service: "С",
-  stub: "Р",
+  reserved: "—",
 };
+
+export const PREFS: Array<{ code: string; name: string }> = [
+  { code: "00", name: "Столица Йент" },
+  { code: "01", name: "Префектура Наго" },
+  { code: "02", name: "Префектура Накио" },
+  { code: "03", name: "Префектура Ярикава" },
+  { code: "04", name: "Префектура Кагиото" },
+  { code: "05", name: "Префектура Канаканэ" },
+  { code: "06", name: "Провинция Катэ" },
+  { code: "99", name: "Служебные коды" },
+];
 
 export const LEGAL_SHORT =
   "Собственность Аргской Империи • Ст. 123 ROTTO • КГТ Ст. 1 (187): трафик анализируется ГНИЦСТ";
@@ -162,23 +126,17 @@ export const LEGAL_FULL = [
   "Настоящая информационная сеть является собственностью Аргской Империи.",
   "В соответствии со Статьёй 123 ROTTO любое лицо, находящееся в цифровом или физическом периметре АИ, обязано соблюдать законы Империи.",
   "В соответствии со Статьёй 1 (187) КГТ все действия, транзакции e-T, почтовые отправления и журналы вызовов ГИКС автоматически анализируются алгоритмами ГНИЦСТ на предмет соответствия Закону Toqorro.",
-  "Право на неприкосновенность переписки (Ст. 13.1 (22) Toqorro) может быть ограничено по решению Военного или Государственного трибунала в интересах безопасности Корона.",
+  "Право на неприкосновенность переписки (Ст. 13.1 (22) Toqorro) может быть ограничено по решению Военного или Государственного трибунала в интересах безопасности Империи.",
   "Использование сети для распространения КГТ, критики монархического строя или организации несанкционированных собраний влечёт уголовную ответственность по Ст. 2 (66) и Ст. 3 (67) УК АИ.",
 ];
 
-/* ---------------- хранилище ---------------- */
+/* ---------- сид ---------- */
 
 const KEY = "argnet-db-v2";
 const SKEY = "argnet-session-v2";
 const H = 3_600_000;
 const D = 24 * H;
 const NOW = Date.now();
-export const NET_EPOCH = NOW - 263 * D;
-
-export function giksCheck(digits: string): number {
-  const sum = digits.replace(/\D/g, "").split("").reduce((a, c) => a + Number(c), 0);
-  return sum % 10;
-}
 
 function seed(): DB {
   return {
@@ -186,127 +144,106 @@ function seed(): DB {
     users: [
       {
         login: "krol",
-        itirinio: "A-000-001",
+        itirinio: "000000000001-000000000001",
         name: "Аргольд IV, Император Аргии",
         password: "arg-root",
         role: "root",
-        kind: "citizen",
-        giks: "12-001",
+        giks: "12-001-4",
         pref: "00",
-        balance: 250000,
         blocked: false,
-        createdAt: NOW - 263 * D,
+        createdAt: NOW - 780 * D,
       },
       {
-        login: "vega",
-        itirinio: "A-000-010",
-        name: "Вегас Т.Н.",
+        login: "arcanum",
+        itirinio: "401277915320-883002174415",
+        name: "Смотритель тайной связи",
         password: "arg-tech",
         role: "tech",
-        kind: "citizen",
-        giks: "12-010",
+        giks: "24-12-010-0",
         pref: "00",
-        balance: 4200,
         blocked: false,
-        createdAt: NOW - 240 * D,
+        createdAt: NOW - 700 * D,
       },
       {
-        login: "morag",
-        itirinio: "A-000-017",
-        name: "Мораг К.С.",
+        login: "moder",
+        itirinio: "512208347761-902114530087",
+        name: "Дежурный цензор Стражи",
         password: "arg-mod",
         role: "moderator",
-        kind: "citizen",
-        giks: "24-01-007",
+        giks: "24-01-011-9",
         pref: "00",
-        balance: 3100,
         blocked: false,
-        createdAt: NOW - 210 * D,
+        createdAt: NOW - 400 * D,
       },
       {
-        login: "kolleg",
-        itirinio: "A-000-021",
-        name: "Операт К.Л.",
-        password: "arg-op",
+        login: "kollegia",
+        itirinio: "603915228407-114709263358",
+        name: "Секретарь Коллегии внутренних дел",
+        password: "arg-oper",
         role: "operator",
-        kind: "citizen",
-        giks: "12-021",
+        giks: "12-005-8",
         pref: "00",
-        balance: 2750,
         blocked: false,
-        createdAt: NOW - 180 * D,
+        createdAt: NOW - 400 * D,
       },
       {
         login: "ivanov",
-        itirinio: "A-001-291",
-        name: "Иванов П.А.",
-        password: "arg-1234",
-        role: "user",
-        kind: "citizen",
-        giks: "17-00-45291-9",
+        itirinio: "718442906513-229518074460",
+        name: "Иванов А. П.",
+        password: "arg-civ",
+        role: "citizen",
+        giks: "17-00-00042-4",
         pref: "00",
-        balance: 1180,
         blocked: false,
-        createdAt: NOW - 90 * D,
+        createdAt: NOW - 120 * D,
       },
       {
-        login: "nakamura",
-        itirinio: "A-003-107",
-        name: "Накамура Р.Т.",
-        password: "arg-1234",
-        role: "user",
-        kind: "citizen",
-        giks: "17-03-10774-5",
-        pref: "03",
-        balance: 640,
+        login: "statusbanko",
+        itirinio: "900230010005-001002277931",
+        name: "StatusBanko, Государственный Банк",
+        password: "arg-bank",
+        role: "legal",
+        giks: "23-00-10005-1",
+        pref: "00",
         blocked: false,
-        createdAt: NOW - 41 * D,
-      },
-      {
-        login: "torgdom",
-        itirinio: "A-010-005",
-        name: "Торговый дом «Наго»",
-        password: "arg-1234",
-        role: "user",
-        kind: "legal",
-        giks: "23-01-10005-3",
-        pref: "01",
-        balance: 18400,
-        blocked: false,
-        createdAt: NOW - 30 * D,
+        createdAt: NOW - 300 * D,
       },
     ],
+    zones: [
+      { tld: "arg", desc: "Государственная зона Империи: учреждения, службы, официальные узлы.", createdAt: NOW - 780 * D, system: true },
+      { tld: "anct", desc: "Аргская Народная Цифровая Территория: службы общего пользования.", createdAt: NOW - 775 * D, system: true },
+    ],
     domains: [
-      { name: "login", tld: "arg", kind: "service", owner: "krol", desc: "Единый портал аутентификации (SSO) по Iŧirinio.", port: 8000, system: true, createdAt: NOW - 263 * D },
-      { name: "sb", tld: "arg", kind: "bank", owner: "krol", desc: "StatusBanko — Государственный Банк: счета и транзакции e-T.", port: 8001, system: true, createdAt: NOW - 260 * D },
-      { name: "gnicst", tld: "anct", kind: "monitor", owner: "krol", desc: "ГНИЦСТ (Kostosęrio dę Arcanum): спец. связь и мониторинг. Закрытый контур.", port: 8002, system: true, createdAt: NOW - 258 * D },
-      { name: "post", tld: "arg", kind: "mail", owner: "krol", desc: "КЭП — Императорская электронная почта для граждан и ЮЛ (аббревиатура сохранена Манифестом).", port: 8003, system: true, createdAt: NOW - 255 * D },
-      { name: "call", tld: "arg", kind: "voip", owner: "krol", desc: "ГИКС — государственная внутренняя телефония (WebRTC).", port: 8004, system: true, createdAt: NOW - 252 * D },
-      { name: "kance", tld: "arg", kind: "admin", owner: "krol", desc: "Канцелярия Дворца Palacium Ręgnum: администрирование ЕГИКС.", port: 8005, system: true, createdAt: NOW - 250 * D },
-      { name: "kustos", tld: "arg", kind: "agency", agency: "kustos", owner: "krol", desc: "Стража (Kustos): правопорядок, жалобы, модерация.", port: 8006, system: true, createdAt: NOW - 245 * D },
-      { name: "kustodia", tld: "arg", kind: "agency", agency: "kustodia", owner: "krol", desc: "Гвардия (Kustodia): охрана Дворца. Режимный объект.", port: 8007, system: true, createdAt: NOW - 245 * D },
-      { name: "ante", tld: "anct", kind: "agency", agency: "ante", owner: "krol", desc: "Армия (Tęrra-an / Cię-an): военный контур.", port: 8008, system: true, createdAt: NOW - 244 * D },
-      { name: "krg", tld: "arg", kind: "portal", owner: "krol", desc: "Универсальный портал Коллегий: реестр, вести, сводка сети.", port: 8009, system: true, createdAt: NOW - 240 * D },
-      { name: "kollęgęn", tld: "arg", kind: "portal", owner: "krol", desc: "Альтернативный домен Коллегий (зеркало krg.arg).", port: 8010, mirror: true, system: true, createdAt: NOW - 240 * D },
+      { name: "login", tld: "arg", kind: "service", owner: "krol", desc: "Единый портал аутентификации (SSO) по IŦirinio.", port: 8000, hosted: true, system: true, createdAt: NOW - 770 * D },
+      { name: "sb", tld: "arg", kind: "bank", owner: "statusbanko", desc: "StatusBanko — Государственный Банк: счета e-T и расчёты.", port: 8001, hosted: true, system: true, createdAt: NOW - 700 * D },
+      { name: "gnicst", tld: "anct", kind: "reserved", owner: "arcanum", desc: "ГНИЦСТ (Kostosęrio dę Arcanum). Адрес выделен; служба размещается владельцем.", port: 8002, hosted: false, system: true, createdAt: NOW - 760 * D },
+      { name: "post", tld: "arg", kind: "mail", owner: "krol", desc: "КЭП — единая почта Аргской Империи для граждан и ЮЛ.", port: 8003, hosted: true, system: true, createdAt: NOW - 750 * D },
+      { name: "call", tld: "arg", kind: "voip", owner: "krol", desc: "ГИКС — государственная внутренняя телефония (WebRTC).", port: 8004, hosted: true, system: true, createdAt: NOW - 750 * D },
+      { name: "kance", tld: "arg", kind: "admin", owner: "krol", desc: "Канцелярия Дворца Palacium Ręgnum: выдача паспортов, номеров, доменов и зон.", port: 8005, hosted: true, system: true, createdAt: NOW - 750 * D },
+      { name: "kustos", tld: "arg", kind: "reserved", owner: "moder", desc: "Стража (Kustos). Адрес выделен; служба размещается владельцем.", port: 8006, hosted: false, system: true, createdAt: NOW - 740 * D },
+      { name: "kustodia", tld: "arg", kind: "reserved", owner: "krol", desc: "Гвардия (Kustodia). Адрес выделен; служба размещается владельцем.", port: 8007, hosted: false, system: true, createdAt: NOW - 740 * D },
+      { name: "ante", tld: "anct", kind: "reserved", owner: "krol", desc: "Армия (Tęrra-an / Cię-an). Адрес выделен; служба размещается владельцем.", port: 8008, hosted: false, system: true, createdAt: NOW - 740 * D },
+      { name: "krg", tld: "arg", kind: "portal", owner: "krol", desc: "Универсальный портал Коллегий — входные врата ARG-NET.", port: 8009, hosted: true, system: true, createdAt: NOW - 770 * D },
+      { name: "kollęgęn", tld: "arg", kind: "portal", owner: "krol", desc: "Зеркало портала Коллегий для резервирования.", port: 8010, hosted: true, system: true, mirror: true, createdAt: NOW - 760 * D },
     ],
     emails: [
       {
         id: "e1",
-        from: "morag",
+        from: "ivanov",
         to: "krol",
-        subject: "Рапорт: признаки нарушения ст. 2 (66) УК АК",
-        body: "Ваше Величество!\n\nДовожу до сведения: на форуме krg.arg зафиксирована публикация, содержащая признаки критики монархического строя. Автор установлен по Iŧirinio, учётная запись заблокирована в порядке ст. 3 (67) УК АК.\n\nМатериалы переданы в ГНИЦСТ для анализа по КГТ Ст. 1 (187).\n\nМораг К.С., модератор Стражи\nГиКС 24-01-007",
-        ts: NOW - 20 * H,
+        subject: "Прошение о домене в зоне .arg",
+        body: "Ваше Императорское Величество!\n\nПрошу выделить за моим именем домен ivanov.arg для ведения личного архива. Пошлину обязуюсь внести в StatusBanko в установленный срок.\n\nС верноподданнической преданностью,\nИванов А. П.\nIŦirinio 718442906513-229518074460",
+        ts: NOW - 26 * H,
         read: false,
         folder: "in",
         trashed: false,
       },
       {
         id: "e2",
-        from: "vega",
+        from: "kollegia",
         to: "krol",
-        subject: "Отчёт ГНИЦСТ: плановый анализ трафика ЕГИКС",
-        body: "Государь!\n\nЗа отчётную седмицу алгоритмами ГНИЦСТ обработано: 1 214 почтовых отправлений КЭП, 342 вызова ГИКС, 96 транзакций e-T. Отклонений от Закона Toqorro не выявлено.\n\nУзел gnicst.anct несёт службу в штатном режиме, задержка до столицы — 11 мс.\n\nВегас Т.Н., тех. специалист\nГиКС 12-010",
+        subject: "Сводка: регистрация ЮЛ за седмицу",
+        body: "Государь!\n\nДокладываю: за седмицу Коллегией зарегистрировано одно юридическое лицо, выдан номер ГиКС 23-00-10005-1. Нарушений Закона Toqorro при регистрации не выявлено.\n\nСекретарь Коллегии внутренних дел",
         ts: NOW - 2 * D,
         read: false,
         folder: "in",
@@ -314,145 +251,60 @@ function seed(): DB {
       },
       {
         id: "e3",
-        from: "ivanov",
-        to: "krol",
-        subject: "Прошение о регистрации ЮЛ (префикс 23)",
-        body: "Ваше Величество!\n\nПрошу зарегистрировать юридическое лицо «Мастерская Иванова» с присвоением номера ГИКС префикса 23 по префектуре 00 (Столица Йент). Устав и квитанция об уплате пошлины e-T прилагаются.\n\nС верноподданнической преданностью,\nИванов П.А.\nIŧirinio A-001-291",
+        from: "krol",
+        to: "ivanov",
+        subject: "Указ №17 — о едином адресном пространстве",
+        body: "ПОВЕЛЕВАЮ:\n\n1. Зону .arg утвердить за учреждениями государственными.\n2. Зону .anct — Аргскую Народную Цифровую Территорию — открыть для служб.\n3. Выделение доменов и новых доменных зон вести в Канцелярии Дворца.\n\nПодписано электронной печатью Империи.",
         ts: NOW - 3 * D,
-        read: false,
-        folder: "in",
+        read: true,
+        folder: "out",
         trashed: false,
       },
       {
         id: "e4",
         from: "krol",
         to: "ivanov",
-        subject: "О порядке присвоения номеров префикса 23",
-        body: "Милостивый государь!\n\nРегистрация ЮЛ ведётся Оператором Коллегии через Канцелярию (kance.arg). По рассмотрении прошения Вам будет присвоен номер вида 23-00-XXXXX-C, где C — контрольная цифра по Табели Kogoręx.\n\nПошлина списывается StatusBanko автоматически.\n\nКанцелярия Дворца Palacium Ręgnum",
-        ts: NOW - 3 * D - 5 * H,
+        subject: "Указ №17 — о едином адресном пространстве",
+        body: "ПОВЕЛЕВАЮ:\n\n1. Зону .arg утвердить за учреждениями государственными.\n2. Зону .anct — Аргскую Народную Цифровую Территорию — открыть для служб.\n3. Выделение доменов и новых доменных зон вести в Канцелярии Дворца.\n\nПодписано электронной печатью Империи.",
+        ts: NOW - 3 * D,
         read: true,
-        folder: "out",
-        trashed: false,
-      },
-      {
-        id: "e5",
-        from: "torgdom",
-        to: "ivanov",
-        subject: "Счёт за партию креплений для узла 04",
-        body: "Господин Иванов!\n\nНаправляем счёт на 240 e-T за партию кабельных креплений, отгруженную для узла 04 (Префектура Кагиото). Оплата через StatusBanko (sb.arg), назначение: «Счёт 17/К».\n\nТорговый дом «Наго»\nГиКС 23-01-10005-3",
-        ts: NOW - 26 * H,
-        read: false,
         folder: "in",
         trashed: false,
       },
       {
-        id: "e6",
-        from: "krol",
-        to: "vega",
-        subject: "Повеление: подготовить узел к учениям",
-        body: "ПОВЕЛЕВАЮ:\n\n1. Подготовить gnicst.anct к плановым учениям по резервированию.\n2. Проверить перезапуск служб портов 8000–8010.\n3. Доклад представить через КЭП к полнолунию.\n\nАргольд IV",
-        ts: NOW - 6 * D,
-        read: true,
-        folder: "out",
+        id: "e5",
+        from: "statusbanko",
+        to: "krol",
+        subject: "Выписка по счёту Казны",
+        body: "Направляем выписку по счёту Императорской Казны. Остаток на начало дня — 12 500,00 e-T. Поступления пошлин за доменные имена — 14,00 e-T.\n\nStatusBanko, операционный отдел",
+        ts: NOW - 1 * D,
+        read: false,
+        folder: "in",
         trashed: false,
       },
     ],
     calls: [
-      { id: "c1", from: "krol", to: "vega", ts: NOW - 5 * H, duration: 254, status: "ok" },
+      { id: "c1", from: "krol", to: "kollegia", ts: NOW - 5 * H, duration: 254, status: "ok" },
       { id: "c2", from: "ivanov", to: "krol", ts: NOW - 1 * D - 3 * H, duration: 61, status: "ok" },
-      { id: "c3", from: "morag", to: "krol", ts: NOW - 2 * D - 7 * H, duration: 0, status: "missed" },
+      { id: "c3", from: "statusbanko", to: "krol", ts: NOW - 2 * D - 7 * H, duration: 0, status: "missed" },
+    ],
+    txs: [
+      { id: "t1", from: "ivanov", to: "statusbanko", amount: 3, purpose: "Пошлина за доменное имя (зона .arg)", ts: NOW - 2 * D },
+      { id: "t2", from: "statusbanko", to: "krol", amount: 1200, purpose: "Ежемесячное довольствие Гвардии", ts: NOW - 5 * D },
+      { id: "t3", from: "krol", to: "arcanum", amount: 450, purpose: "Закупка машин для узла 07", ts: NOW - 9 * D },
     ],
     log: [
-      { ts: NOW - 1 * H, text: "Плановая сверка Государственного реестра Iŧirinio" },
-      { ts: NOW - 5 * H, text: "ГИКС: krol → vega (04:14)" },
-      { ts: NOW - 20 * H, text: "Стража: заблокирована учётная запись (ст. 3 (67) УК АК)" },
-      { ts: NOW - 26 * H, text: "КЭП: torgdom → ivanov («Счёт за партию…»)" },
-      { ts: NOW - 2 * D, text: "ГНИЦСТ: плановый анализ трафика завершён, отклонений нет" },
-      { ts: NOW - 3 * D, text: "StatusBanko: транзакция e-T 240.00 (ivanov → torgdom)" },
-    ],
-    news: [
-      {
-        id: "n1",
-        title: "Закон Toqorro вступил в полную силу на всей территории ЕГИКС",
-        date: "вчера, 09:00",
-        tag: "Закон",
-        lead: "С полуночи алгоритмы ГНИЦСТ применяют положения Закона ко всем видам трафика: КЭП, ГИКС, транзакции e-T.",
-        text: "В соответствии со Ст. 1 (187) КГТ анализу подлежат почтовые отправления, журналы вызовов и транзакции e-T. Коллегия о внутренних делах напоминает: незнание Закона Toqorro не освобождает от ответственности по Ст. 2 (66) и Ст. 3 (67) УК АК.",
-      },
-      {
-        id: "n2",
-        title: "ГИКС: введена номерная ёмкость по Табели о рангах Kogoręx",
-        date: "2 дня назад",
-        tag: "ГИКС",
-        lead: "Номера строго отражают иерархию: 12 — гос. органы, 17 — граждане, 23 — ЮЛ, 24 — силовые структуры, 99 — технические.",
-        text: "Гражданские номера имеют вид 17-XX-XXXXX-C, где XX — код префектуры по Указу № 24, C — контрольная цифра. Выдача номеров ведётся исключительно через Канцелярию Дворца (kance.arg).",
-      },
-      {
-        id: "n3",
-        title: "StatusBanko ввёл мгновенные транзакции e-T между подданными",
-        date: "3 дня назад",
-        tag: "Банк",
-        lead: "Переводы между счетами ЕГИКС исполняются за доли секунды; каждая операция фиксируется в реестре ГНИЦСТ.",
-        text: "Государственный Банк (sb.arg) напоминает: назначение платежа обязательно. Транзакции без назначения трактуются как подозрительные и передаются в Стражу (kustos.arg).",
-      },
-      {
-        id: "n4",
-        title: "Указ № 24: утверждено административно-территориальное деление",
-        date: "4 дня назад",
-        tag: "Указ",
-        lead: "Префектуры получили коды 00–06; провинция Катэ управляется напрямую Короной.",
-        text: "Коды префектур применяются в номерах ГИКС граждан и ЮЛ. Столичный код 00 закреплён за Йентом (Ient). Служебный код 99 зарезервирован для линий ГНИЦСТ.",
-      },
-      {
-        id: "n5",
-        title: "ГНИЦСТ ввёл в строй узел gnicst.anct",
-        date: "5 дней назад",
-        tag: "Инфраструктура",
-        lead: "Закрытый контур спец. связи и мониторинга доступен техническим специалистам и Верховному Администратору.",
-        text: "Узел обеспечивает наблюдение за службами портов 8000–8010, журналами аудита и анализом трафика по КГТ. Доступ прочих подданных преследуется по ст. 14 (79) Закона Toqorro.",
-      },
-      {
-        id: "n6",
-        title: "Коллегия о внутренних делах: выдано 400 Iŧirinio за луну",
-        date: "6 дней назад",
-        tag: "Реестр",
-        lead: "Темп выдачи идентификаторов вырос втрое после запуска единого портала login.arg.",
-        text: "Каждый Iŧirinio уникален и пожизнен. Передача идентификатора третьим лицам приравнивается к передаче ключей от крепости и карается по Ст. 123 ROTTO.",
-      },
-    ],
-    complaints: [
-      {
-        id: "q1",
-        from: "ivanov",
-        subject: "Навязчивые предложения на форуме krg.arg",
-        text: "Пользователь с Iŧirinio A-007-331 рассыпает предложения «чудодейственных амулетов связи». Прошу принять меры по Закону Toqorro.",
-        ts: NOW - 30 * H,
-        status: "open",
-      },
-      {
-        id: "q2",
-        from: "torgdom",
-        subject: "Оскорбление деловой репутации",
-        text: "В разделе «Торговля» опубликованы заведомо ложные сведения о качестве креплений ТД «Наго». Просим установить автора и привлечь по ст. 2 (66) УК АК.",
-        ts: NOW - 3 * D,
-        status: "open",
-      },
-      {
-        id: "q3",
-        from: "nakamura",
-        subject: "Попытка подбора пароля к ящику КЭП",
-        text: "Зафиксировано 14 неудачных попыток входа в мой ящик с чужого Iŧirinio. Прошу проверить по журналам ГНИЦСТ.",
-        ts: NOW - 6 * D,
-        status: "resolved",
-      },
-    ],
-    tx: [
-      { id: "t1", from: "krol", to: "ivanov", amount: 300, note: "Жалование смотрителю узла 04", ts: NOW - 3 * D },
-      { id: "t2", from: "ivanov", to: "torgdom", amount: 240, note: "Счёт 17/К, крепления", ts: NOW - 3 * D + 2 * H },
-      { id: "t3", from: "torgdom", to: "krol", amount: 150, note: "Пошлина за номер 23-01-10005-3", ts: NOW - 30 * D },
+      { ts: NOW - 1 * H, text: "Плановая сверка Государственного реестра доменов" },
+      { ts: NOW - 5 * H, text: "Вызов ГиКС: krol → kollegia (04:14)" },
+      { ts: NOW - 26 * H, text: "ivanov: вход в сеть (узел 01, Йент)" },
+      { ts: NOW - 2 * D, text: "Письмо: krol → ivanov («Указ №17…»)" },
+      { ts: NOW - 3 * D, text: "StatusBanko: перевод 3,00 e-T от ivanov" },
+      { ts: NOW - 120 * D, text: "Выдан паспорт 718442906513-229518074460 (ivanov)" },
     ],
   };
 }
+
+/* ---------- хранилище ---------- */
 
 let cache: DB | null = null;
 let version = 0;
@@ -473,7 +325,7 @@ function load(): DB {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as DB;
-      if (parsed && parsed.v === 2 && Array.isArray(parsed.users)) return parsed;
+      if (parsed && parsed.v === 2 && Array.isArray(parsed.users) && Array.isArray(parsed.zones)) return parsed;
     }
   } catch {
     /* повреждённые данные — пересоздаём */
@@ -502,40 +354,99 @@ export function useDB(): DB {
 }
 const uid = () => Math.random().toString(36).slice(2, 10);
 
-/* ---------------- сессия и доступ ---------------- */
+/* ---------- сессия (на вкладку — свой вход) ---------- */
 
 export function getSession(): User | null {
-  const login = localStorage.getItem(SKEY);
+  const login = sessionStorage.getItem(SKEY);
   if (!login) return null;
   return getDB().users.find((u) => u.login === login) ?? null;
 }
 export function setSession(login: string | null) {
-  if (login) localStorage.setItem(SKEY, login);
-  else localStorage.removeItem(SKEY);
+  if (login) sessionStorage.setItem(SKEY, login);
+  else sessionStorage.removeItem(SKEY);
 }
 
-export type AuthResult =
-  | { ok: true; user: User }
-  | { ok: false; reason: "notfound" | "blocked" | "badpass" };
+/* ---------- паспорта и номера ГиКС ---------- */
 
-export function authUser(idInput: string, password: string): AuthResult {
-  const id = idInput.trim().toLowerCase();
-  const u = getDB().users.find((x) => x.itirinio.toLowerCase() === id || x.login === id);
-  if (!u) {
-    addLog(`Отказ доступа: Iŧirinio «${idInput.trim()}» не найден в реестре`);
-    return { ok: false, reason: "notfound" };
+const itDigits = (s: string) => s.replace(/\D/g, "");
+export function itirinioValid(s: string) {
+  return /^\d{12}-\d{12}$/.test(s.trim());
+}
+export function itMatch(a: string, b: string) {
+  return itDigits(a) === itDigits(b) && itDigits(a).length === 24;
+}
+
+function genItirinio(db: DB): string {
+  for (let i = 0; i < 50; i++) {
+    const p1 = String(Math.floor(100000000000 + Math.random() * 900000000000));
+    const p2 = String(Math.floor(100000000000 + Math.random() * 900000000000));
+    const it = `${p1}-${p2}`;
+    if (!db.users.some((u) => u.itirinio === it)) return it;
   }
+  return `${Date.now()}00-000000000000`;
+}
+
+/** Контрольная цифра ГиКС: сумма всех цифр номера без десятых частей. */
+export function giksCheck(digits: string): number {
+  const s = digits.replace(/\D/g, "").split("").reduce((a, c) => a + Number(c), 0);
+  return s % 10;
+}
+export function checkGiks(g: string): boolean {
+  const parts = g.split("-");
+  const last = Number(parts[parts.length - 1]);
+  return giksCheck(g.slice(0, g.lastIndexOf("-"))) === last;
+}
+
+function nextSeq(db: DB, prefix: string, width: number): string {
+  let max = 0;
+  for (const u of db.users) {
+    if (u.giks.startsWith(prefix)) {
+      const seg = u.giks.slice(prefix.length).split("-")[0];
+      const n = parseInt(seg, 10);
+      if (!Number.isNaN(n) && n > max) max = n;
+    }
+  }
+  return String(max + 1).padStart(width, "0");
+}
+
+export function genGiks(db: DB, role: Role, pref: string): string {
+  let base = "";
+  switch (role) {
+    case "root":
+    case "operator":
+      base = `12-${nextSeq(db, "12-", 3)}`;
+      break;
+    case "tech":
+      base = `24-12-${nextSeq(db, "24-12-", 3)}`;
+      break;
+    case "moderator":
+      base = `24-01-${nextSeq(db, "24-01-", 3)}`;
+      break;
+    case "legal":
+      base = `23-00-${nextSeq(db, "23-00-", 5)}`;
+      break;
+    default:
+      base = `17-${pref}-${nextSeq(db, `17-${pref}-`, 5)}`;
+  }
+  return `${base}-${giksCheck(base)}`;
+}
+
+export function authUser(itirinio: string, password: string): { ok: true; user: User } | { ok: false; err: "notfound" | "blocked" | "badpass" } {
+  const u = getDB().users.find((x) => itMatch(x.itirinio, itirinio));
+  if (!u) return { ok: false, err: "notfound" };
   if (u.blocked) {
-    addLog(`Отказ доступа: ${u.login} — учётная запись заблокирована`);
-    return { ok: false, reason: "blocked" };
+    addLog(`ОТКАЗ: вход по паспорту ${u.itirinio} (учётная запись заблокирована)`);
+    return { ok: false, err: "blocked" };
   }
   if (u.password !== password) {
-    addLog(`Отказ доступа: ${u.login} — неверный пароль`);
-    return { ok: false, reason: "badpass" };
+    addLog(`ОТКАЗ: неверный пароль по паспорту ${u.itirinio} (передано в ГНИЦСТ)`);
+    return { ok: false, err: "badpass" };
   }
-  addLog(`${u.login}: вход в сеть (Iŧirinio ${u.itirinio})`);
+  addLog(`${u.login}: вход в сеть (узел 01, Йент)`);
   return { ok: true, user: u };
 }
+
+/* ---------- журнал ---------- */
 
 export function addLog(text: string) {
   mutate((db) => {
@@ -544,98 +455,90 @@ export function addLog(text: string) {
   });
 }
 
-/* ---------------- реестр Iŧirinio ---------------- */
-
-function nextItirinio(db: DB): string {
-  const nums = db.users.map((u) => parseInt(u.itirinio.replace(/\D/g, ""), 10)).filter((n) => !Number.isNaN(n));
-  const max = nums.length ? Math.max(...nums) : 0;
-  return `A-${String(max + 1).padStart(6, "0").slice(0, 3)}-${String(max + 1).padStart(6, "0").slice(3)}`;
-}
-
-export function genGiks(d: { role: Role; kind: UserKind; pref: string }): string {
-  const serial5 = () => String(Math.floor(10000 + Math.random() * 89999));
-  const serial3 = () => String(Math.floor(100 + Math.random() * 899));
-  if (d.kind === "legal") {
-    const s = serial5();
-    return `23-${d.pref}-${s}-${giksCheck("23" + d.pref + s)}`;
-  }
-  if (d.role === "user") {
-    const s = serial5();
-    return `17-${d.pref}-${s}-${giksCheck("17" + d.pref + s)}`;
-  }
-  if (d.role === "moderator") return `24-01-${serial3()}`;
-  if (d.role === "tech") return `12-0${serial3().slice(0, 2)}`;
-  if (d.role === "operator") return `12-0${serial3().slice(0, 2)}`;
-  return `99-${serial3()}`;
-}
+/* ---------- учётные записи ---------- */
 
 export interface NewUser {
-  login: string;
   name: string;
-  password: string;
   role: Role;
-  kind: UserKind;
-  pref: string;
-  balance: number;
+  password: string;
+  pref?: string;
 }
-
 export function createUser(d: NewUser): { err?: string; user?: User } {
-  const login = d.login.trim().toLowerCase();
-  if (!/^[a-z0-9_-]{3,16}$/.test(login)) return { err: "Логин: 3–16 знаков — латиница, цифры, «-», «_»" };
-  const db = getDB();
-  if (db.users.some((u) => u.login === login)) return { err: "Такой логин уже числится в реестре" };
-  if (!d.name.trim()) return { err: "Укажите фамилию и инициалы" };
+  if (!d.name.trim()) return { err: "Укажите имя" };
   if (d.password.length < 6) return { err: "Пароль — не менее 6 знаков" };
+  const pref = d.role === "citizen" ? d.pref ?? "00" : "00";
+  const db = getDB();
   const user: User = {
-    login,
-    itirinio: nextItirinio(db),
+    login: d.name.trim().toLowerCase().replace(/[^a-zа-яё0-9]+/gi, "-").slice(0, 18) + "-" + uid().slice(0, 4),
+    itirinio: genItirinio(db),
     name: d.name.trim(),
     password: d.password,
     role: d.role,
-    kind: d.kind,
-    giks: genGiks(d),
-    pref: d.pref,
-    balance: d.balance,
+    giks: genGiks(db, d.role, pref),
+    pref,
     blocked: false,
     createdAt: Date.now(),
   };
   mutate((x) => x.users.push(user));
-  addLog(`Выдан Iŧirinio ${user.itirinio} (${user.name}), ГиКС ${user.giks}`);
+  addLog(`Выдан паспорт ${user.itirinio} (${user.name}), номер ГиКС ${user.giks}`);
   return { user };
 }
 
-export function toggleBlock(login: string): string | null {
-  if (login === "krol") return "Особа Короны неприкосновенна";
-  mutate((db) => {
-    const u = db.users.find((x) => x.login === login);
-    if (u) {
-      u.blocked = !u.blocked;
-      addLog(`Учётная запись ${login} ${u.blocked ? "заблокирована" : "разблокирована"} (ст. 3 (67) УК АК)`);
-    }
+export function deleteUser(login: string): string | null {
+  const db = getDB();
+  const u = db.users.find((x) => x.login === login);
+  if (!u) return "Не найдено";
+  if (u.role === "root") return "Особа Императорского Дома неприкосновенна";
+  mutate((d) => {
+    d.users = d.users.filter((x) => x.login !== login);
   });
+  addLog(`Аннулирован паспорт ${u.itirinio} (${login})`);
   return null;
 }
 
-export function deleteUser(login: string): string | null {
-  if (login === "krol") return "Особа Короны неприкосновенна";
+export function setBlocked(login: string, blocked: boolean) {
   mutate((db) => {
-    db.users = db.users.filter((u) => u.login !== login);
+    const u = db.users.find((x) => x.login === login);
+    if (u) u.blocked = blocked;
   });
-  addLog(`Iŧirinio ${login} аннулирован в Государственном реестре`);
-  return null;
+  addLog(`${blocked ? "Заблокирован" : "Разблокирован"}: ${login}`);
 }
 
 export function resetPassword(login: string): string {
-  const pass = `arg-${String(Math.floor(100000 + Math.random() * 899999))}`;
+  const pass = `arg-${Math.floor(100000 + Math.random() * 900000)}`;
   mutate((db) => {
     const u = db.users.find((x) => x.login === login);
     if (u) u.password = pass;
   });
-  addLog(`Аккаунту ${login} перевыпущен пароль`);
+  addLog(`Перевыпущен пароль: ${login}`);
   return pass;
 }
 
-/* ---------------- домены ---------------- */
+/* ---------- доменные зоны ---------- */
+
+export function createZone(tld: string, desc: string): string | null {
+  const t = tld.trim().toLowerCase().replace(/^\./, "");
+  if (!/^[a-z][a-z0-9-]{1,11}$/.test(t)) return "Зона: 2–12 знаков, латиница, начинается с буквы";
+  if (getDB().zones.some((z) => z.tld === t)) return `Зона .${t} уже существует`;
+  mutate((db) => db.zones.push({ tld: t, desc: desc.trim() || "Доменная зона ARG-NET", createdAt: Date.now() }));
+  addLog(`Выделена доменная зона .${t}`);
+  return null;
+}
+
+export function deleteZone(tld: string): string | null {
+  const db = getDB();
+  const z = db.zones.find((x) => x.tld === tld);
+  if (!z) return "Зона не найдена";
+  if (z.system) return "Основополагающие зоны .arg и .anct защищены Указом №17";
+  if (db.domains.some((d) => d.tld === tld)) return "В зоне числятся домены — сначала отзовите их";
+  mutate((d) => {
+    d.zones = d.zones.filter((x) => x.tld !== tld);
+  });
+  addLog(`Упразднена доменная зона .${tld}`);
+  return null;
+}
+
+/* ---------- домены ---------- */
 
 export function domainFull(d: Domain) {
   return `${d.name}.${d.tld}`;
@@ -654,33 +557,55 @@ export function resolveHost(input: string): string {
   if (!s) return "krg.arg";
   if (s.includes(".")) return s;
   const db = getDB();
-  if (db.domains.some((d) => domainFull(d) === `${s}.arg`)) return `${s}.arg`;
-  if (db.domains.some((d) => domainFull(d) === `${s}.anct`)) return `${s}.anct`;
+  for (const z of db.zones) {
+    if (db.domains.some((d) => domainFull(d) === `${s}.${z.tld}`)) return `${s}.${z.tld}`;
+  }
   return `${s}.arg`;
 }
-export function registerDomain(d: { name: string; tld: Tld; kind: SiteKind; owner: string; desc: string }): string | null {
-  const name = d.name.trim().toLowerCase();
-  if (!/^[a-z0-9ąćęłńóśźż-]{3,24}$/.test(name)) return "Имя: 3–24 знака (латиница, цифры, «-»)";
-  if (getDB().domains.some((x) => x.name === name && x.tld === d.tld)) return `Домен ${name}.${d.tld} уже выделен`;
-  const port = 8000 + getDB().domains.length;
-  mutate((db) => {
-    db.domains.push({ name, tld: d.tld, kind: d.kind, owner: d.owner, desc: d.desc.trim() || "Узел ARG-Net", port, system: false, createdAt: Date.now() });
-  });
-  addLog(`Выделен домен ${name}.${d.tld} (порт ${port})`);
-  return null;
+
+export interface NewDomain {
+  name: string;
+  tld: string;
+  port: number;
+  owner: string;
+  desc: string;
 }
-export function deleteDomain(host: string): string | null {
-  const d = findDomain(host);
-  if (!d) return "Домен не найден";
-  if (d.system) return "Системный домен защищён повелением Короны";
-  mutate((db) => {
-    db.domains = db.domains.filter((x) => domainFull(x) !== domainFull(d));
-  });
-  addLog(`Домен ${domainFull(d)} исключён из реестра`);
+export function registerDomain(d: NewDomain): string | null {
+  const name = d.name.trim().toLowerCase();
+  if (!/^[a-z0-9-]{2,24}$/.test(name)) return "Имя: 2–24 знака — латиница, цифры, «-»";
+  const db = getDB();
+  if (!db.zones.some((z) => z.tld === d.tld)) return `Доменная зона .${d.tld} не выделена`;
+  if (db.domains.some((x) => x.name === name && x.tld === d.tld)) return `Домен ${name}.${d.tld} уже выделен`;
+  if (d.port < 1024 || d.port > 65535) return "Порт: от 1024 до 65535";
+  if (db.domains.some((x) => x.port === d.port)) return `Порт ${d.port} уже закреплён за другим узлом`;
+  mutate((x) =>
+    x.domains.push({
+      name,
+      tld: d.tld,
+      kind: "reserved",
+      owner: d.owner,
+      desc: d.desc.trim() || "Адрес выделен Канцелярией",
+      port: d.port,
+      hosted: false,
+      createdAt: Date.now(),
+    })
+  );
+  addLog(`Выделен домен ${name}.${d.tld} (порт ${d.port})`);
   return null;
 }
 
-/* ---------------- КЭП ---------------- */
+export function deleteDomain(host: string): string | null {
+  const d = findDomain(host);
+  if (!d) return "Домен не найден";
+  if (d.system) return "Системный домен защищён Указом №17";
+  mutate((db) => {
+    db.domains = db.domains.filter((x) => domainFull(x) !== domainFull(d));
+  });
+  addLog(`Отозван домен ${domainFull(d)}`);
+  return null;
+}
+
+/* ---------- почта (КЭП) ---------- */
 
 export function sendMail(from: string, to: string, subject: string, body: string) {
   const ts = Date.now();
@@ -689,7 +614,7 @@ export function sendMail(from: string, to: string, subject: string, body: string
     db.emails.push({ id: "i" + uid(), from, to, subject: subj, body, ts, read: false, folder: "in", trashed: false });
     db.emails.push({ id: "o" + uid(), from, to, subject: subj, body, ts, read: true, folder: "out", trashed: false });
   });
-  addLog(`КЭП: ${from} → ${to} («${subj.slice(0, 22)}${subj.length > 22 ? "…" : ""}»)`);
+  addLog(`Письмо: ${from} → ${to} («${subj.slice(0, 22)}${subj.length > 22 ? "…" : ""}»)`);
 }
 export function mailFor(login: string, folder: "in" | "out" | "trash"): EmailMsg[] {
   const db = getDB();
@@ -721,16 +646,18 @@ export function purgeMail(id: string) {
 export function unreadCount(login: string): number {
   return getDB().emails.filter((m) => m.to === login && m.folder === "in" && !m.read && !m.trashed).length;
 }
+export function userByItirinio(it: string): User | null {
+  return getDB().users.find((u) => itMatch(u.itirinio, it)) ?? null;
+}
 
-/* ---------------- ГИКС ---------------- */
+/* ---------- ГИКС ---------- */
 
 export function logCall(from: string, to: string, duration: number, status: CallRec["status"] = "ok") {
   mutate((db) => {
     db.calls.push({ id: uid(), from, to, ts: Date.now(), duration, status });
   });
-  if (status === "ok" && duration > 0) addLog(`ГИКС: ${from} → ${to} (${fmtDur(duration)})`);
-  else if (status === "missed") addLog(`ГИКС: пропущенный вызов ${from} → ${to}`);
-  else if (status === "declined") addLog(`ГИКС: вызов ${from} → ${to} отклонён`);
+  if (status === "ok") addLog(`Вызов ГиКС: ${from} → ${to} (${fmtDur(duration)})`);
+  else addLog(`Вызов ГиКС: ${from} → ${to} — ${status === "missed" ? "пропущен" : status === "declined" ? "отклонён" : "без ответа"}`);
 }
 export function callsFor(login: string): CallRec[] {
   return getDB()
@@ -738,56 +665,36 @@ export function callsFor(login: string): CallRec[] {
     .sort((a, b) => b.ts - a.ts);
 }
 
-/* ---------------- StatusBanko ---------------- */
+/* ---------- банк ---------- */
 
-export function transfer(from: string, to: string, amount: number, note: string): string | null {
+export function balanceOf(login: string): number {
   const db = getDB();
-  const src = db.users.find((u) => u.login === from);
-  const dst = db.users.find((u) => u.login === to);
-  if (!dst) return "Получатель не найден в реестре Iŧirinio";
-  if (dst.login === from) return "Перевод самому себе запрещён регламентом StatusBanko";
-  if (!amount || amount <= 0) return "Сумма должна быть положительной";
-  if (!src || src.balance < amount) return "Недостаточно e-T на счёте";
-  if (!note.trim()) return "Назначение платежа обязательно (регламент StatusBanko)";
-  mutate((x) => {
-    const a = x.users.find((u) => u.login === from)!;
-    const b = x.users.find((u) => u.login === to)!;
-    a.balance -= amount;
-    b.balance += amount;
-    x.tx.push({ id: uid(), from, to, amount, note: note.trim(), ts: Date.now() });
-  });
-  addLog(`StatusBanko: транзакция e-T ${amount.toFixed(2)} (${from} → ${to})`);
+  const base = db.users.find((u) => u.role === "legal")?.login === login ? 150000 : 240;
+  let b = base;
+  for (const t of db.txs) {
+    if (t.to === login) b += t.amount;
+    if (t.from === login) b -= t.amount;
+  }
+  return b;
+}
+export function transfer(from: string, to: string, amount: number, purpose: string): string | null {
+  if (amount <= 0) return "Сумма должна быть положительной";
+  if (balanceOf(from) < amount) return "Недостаточно средств на счёте";
+  if (from === to) return "Перевод самому себе запрещён Уложением";
+  mutate((db) => db.txs.push({ id: uid(), from, to, amount, purpose: purpose.trim() || "Платёж", ts: Date.now() }));
+  addLog(`StatusBanko: перевод ${amount.toLocaleString("ru-RU")} e-T: ${from} → ${to}`);
   return null;
 }
-export function txFor(login: string): Tx[] {
+export function txsFor(login: string): Tx[] {
   return getDB()
-    .tx.filter((t) => t.from === login || t.to === login)
+    .txs.filter((t) => t.from === login || t.to === login)
     .sort((a, b) => b.ts - a.ts);
 }
 
-/* ---------------- Стража: жалобы ---------------- */
+/* ---------- разное ---------- */
 
-export function resolveComplaint(id: string, status: Complaint["status"]) {
-  mutate((db) => {
-    const c = db.complaints.find((x) => x.id === id);
-    if (c) c.status = status;
-  });
-  addLog(`Стража: жалоба ${id.toUpperCase()} — ${status === "resolved" ? "удовлетворена" : "отклонена"}`);
-}
-export function addComplaint(from: string, subject: string, text: string) {
-  mutate((db) => {
-    db.complaints.push({ id: uid(), from, subject: subject.trim(), text: text.trim(), ts: Date.now(), status: "open" });
-  });
-  addLog(`Стража: принята жалоба от ${from} («${subject.trim().slice(0, 20)}»)`);
-}
-
-/* ---------------- разное ---------------- */
-
-export function userByLogin(login: string): User | null {
-  return getDB().users.find((u) => u.login === login) ?? null;
-}
 export function userName(login: string): string {
-  return userByLogin(login)?.name ?? login;
+  return getDB().users.find((u) => u.login === login)?.name ?? login;
 }
 export function fmtTime(ts: number) {
   return new Date(ts).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
@@ -804,11 +711,8 @@ export function fmtDur(s: number) {
 export function phoneDigits(p: string) {
   return p.replace(/\D/g, "");
 }
-export function prefName(code: string): string {
-  return PREFECTURES.find((p) => p.code === code)?.name ?? code;
-}
 
-/* ---------------- тосты ---------------- */
+/* ---------- тосты ---------- */
 
 export interface ToastMsg {
   id: number;

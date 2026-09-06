@@ -1,238 +1,261 @@
-import { useEffect, useState } from "react";
-import { authUser, LEGAL_FULL, ROLE_LABEL, toast, type User } from "../lib/db";
+import { useEffect, useMemo, useState } from "react";
+import { authUser, LEGAL_SHORT, ROLE_LABEL, toast, itirinioValid, type User } from "../lib/db";
 import { Emblem, IcChevD, IcEye, IcEyeOff, IcLock, IcShield } from "../lib/icons";
 
-const STEPS = [
-  "ПРОВЕРКА IŦIRINIO…",
-  "СВЕРКА С ГОСУДАРСТВЕННЫМ РЕЕСТРОМ…",
-  "ЗАПРОС В ГНИЦСТ (КГТ СТ. 1 (187))…",
-  "ВЫДАЧА МАНДАТА ДОСТУПА…",
+const DEMO: Array<{ it: string; pass: string; role: string }> = [
+  { it: "000000000001-000000000001", pass: "arg-root", role: "Верховный Администратор (Император)" },
+  { it: "401277915320-883002174415", pass: "arg-tech", role: "Технический специалист ГНИЦСТ" },
+  { it: "512208347761-902114530087", pass: "arg-mod", role: "Модератор (Стража)" },
+  { it: "603915228407-114709263358", pass: "arg-oper", role: "Оператор Коллегии" },
+  { it: "718442906513-229518074460", pass: "arg-civ", role: "Ťivitano (гражданин)" },
+  { it: "900230010005-001002277931", pass: "arg-bank", role: "Юридическое лицо (StatusBanko)" },
 ];
 
-const DEMO: Array<{ it: string; pass: string; role: string }> = [
-  { it: "A-000-001", pass: "arg-root", role: "Верховный Администратор (Император)" },
-  { it: "A-000-010", pass: "arg-tech", role: "Технический специалист ГНИЦСТ" },
-  { it: "A-000-017", pass: "arg-mod", role: "Модератор Стражи" },
-  { it: "A-000-021", pass: "arg-op", role: "Оператор Коллегии" },
-  { it: "A-001-291", pass: "arg-1234", role: "Ťivitano (гражданин)" },
-  { it: "A-010-005", pass: "arg-1234", role: "Юридическое лицо" },
-];
+type ErrKind = "notfound" | "blocked" | "badpass" | "format" | null;
 
 export default function Gate({ onLogin }: { onLogin: (u: User) => void }) {
   const [it, setIt] = useState("");
   const [pass, setPass] = useState("");
-  const [show, setShow] = useState(false);
-  const [phase, setPhase] = useState<"form" | "auth" | "ok">("form");
-  const [step, setStep] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+  const [showPass, setShowPass] = useState(false);
+  const [err, setErr] = useState<ErrKind>(null);
   const [shake, setShake] = useState(0);
+  const [phase, setPhase] = useState<"idle" | "check" | "ok">("idle");
+  const [grantedTo, setGrantedTo] = useState<User | null>(null);
   const [legal, setLegal] = useState(false);
   const [clock, setClock] = useState(() => new Date());
-  const [grantedTo, setGrantedTo] = useState<User | null>(null);
 
   useEffect(() => {
     const iv = setInterval(() => setClock(new Date()), 1000);
     return () => clearInterval(iv);
   }, []);
 
-  const submit = (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (phase !== "form") return;
-    if (!it.trim() || !pass) {
-      setError("Поля IŦIRINIO и ПАРОЛЬ обязательны к заполнению.");
+  const digits = it.replace(/\D/g, "").slice(0, 24);
+  const formatted = digits.length > 12 ? `${digits.slice(0, 12)}-${digits.slice(12)}` : digits;
+
+  const complete = formatted.length === 25;
+  const canSubmit = complete && pass.length > 0 && phase === "idle";
+
+  const hint = useMemo(() => {
+    if (!formatted) return "введите 24 цифры номера";
+    if (!complete) return `введено ${digits.length} из 24 цифр`;
+    if (!itirinioValid(formatted)) return "проверьте формат";
+    return "формат верен";
+  }, [formatted, digits.length, complete]);
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canSubmit) return;
+    if (!itirinioValid(formatted)) {
+      setErr("format");
       setShake((s) => s + 1);
       return;
     }
-    setError(null);
-    setPhase("auth");
-    setStep(0);
-    STEPS.forEach((_, i) => setTimeout(() => setStep(i + 1), 450 * (i + 1)));
-    setTimeout(() => {
-      const r = authUser(it, pass);
-      if (r.ok) {
-        setGrantedTo(r.user);
+    setPhase("check");
+    setErr(null);
+    window.setTimeout(() => {
+      const res = authUser(formatted, pass);
+      if (res.ok) {
+        setGrantedTo(res.user);
         setPhase("ok");
-        setTimeout(() => onLogin(r.user), 1500);
+        toast(`Аутентификация пройдена. IŦirinio подтверждён.`);
+        window.setTimeout(() => onLogin(res.user), 1500);
       } else {
-        setPhase("form");
+        setErr(res.err);
+        setPhase("idle");
         setShake((s) => s + 1);
-        if (r.reason === "badpass") {
-          setError("Пароль не принят. Попытка входа зарегистрирована в журнале аудита ЕГИКС.");
-        } else {
-          setError(
-            "Указанный идентификатор Iŧirinio не найден в Государственном реестре или заблокирован. Попытка входа зарегистрирована и передана в Kostosęrio dę Arcanum для анализа."
-          );
-        }
       }
-    }, 450 * STEPS.length + 500);
+    }, 900);
   };
 
   return (
-    <div className="relative flex min-h-full flex-col items-center justify-center px-4 py-10">
-      {/* верхняя служебная строка */}
-      <div className="mono pointer-events-none absolute left-4 top-3 text-[10px] tracking-[0.25em] text-[var(--dim)]">
-        ЕГИКС • УЗЕЛ 01 • ЛОКАЛЬНЫЙ КОНТУР
+    <div className="flex min-h-screen flex-col">
+      {/* верхняя строка */}
+      <div className="mono flex items-center justify-between border-b border-[var(--line)] px-4 py-2 text-[10px] tracking-[0.18em] text-[var(--dim)]">
+        <span>ЕГИКС ARG-NET • ГОСУДАРСТВЕННЫЙ СЕГМЕНТ</span>
+        <span className="hidden sm:block">{clock.toLocaleDateString("ru-RU")} • {clock.toLocaleTimeString("ru-RU")}</span>
+        <span className="text-[var(--gold)]">LOGIN.ARG : 8000</span>
       </div>
-      <div className="mono pointer-events-none absolute right-4 top-3 text-[10px] tracking-[0.25em] text-[var(--dim)]">
-        {clock.toLocaleDateString("ru-RU")} {clock.toLocaleTimeString("ru-RU")}
-      </div>
+      <div className="goldline" />
 
-      <div key={shake} className={`w-full max-w-xl ${shake ? "shake" : ""}`}>
-        {/* герб и заголовок */}
-        <div className="fadeUp flex flex-col items-center text-center">
-          <Emblem size={92} />
-          <div className="mt-3 chip chip-gold">ДЛЯ СЛУЖЕБНОГО ПОЛЬЗОВАНИЯ (DSP)</div>
-          <h1 className="display mt-4 text-2xl font-extrabold leading-snug tracking-wide sm:text-[27px]">
-            ГОСУДАРСТВЕННЫЙ СЕГМЕНТ СЕТИ <span className="text-[var(--gold)]">ARG-NET</span>
-          </h1>
-          <p className="mono mt-1 text-[10.5px] tracking-[0.3em] text-[var(--dim)]">LOGIN.ARG • ПОРТ 8000 • ЕДИНЫЙ ПОРТАЛ АУТЕНТИФИКАЦИИ</p>
-          <p className="mt-4 max-w-md text-[13px] leading-relaxed text-[var(--txt2)]">
-            Введите ваш действительный номер Iŧirinio и пароль для аутентификации.
-          </p>
-        </div>
+      <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col justify-center px-4 py-10">
+        <div className="grid gap-10 lg:grid-cols-[1fr_420px]">
+          {/* левая колонка — герб и положение */}
+          <div className="fadeUp flex flex-col justify-center">
+            <Emblem size={110} />
+            <p className="mono mt-6 text-[10px] tracking-[0.35em] text-[var(--gold)]">
+              ЕДИНАЯ ГОСУДАРСТВЕННАЯ ИНФОРМАЦИОННО-КОММУНИКАЦИОННАЯ СЕТЬ
+            </p>
+            <h1 className="display mt-3 text-4xl font-extrabold leading-tight tracking-wide sm:text-5xl">
+              ГОСУДАРСТВЕННЫЙ СЕГМЕНТ СЕТИ <span className="text-[var(--gold)]">ARG-NET</span>
+            </h1>
+            <p className="mt-4 max-w-md text-sm leading-relaxed text-[var(--txt2)]">
+              Введите ваш действительный номер <span className="font-semibold text-[var(--txt)]">IŦirinio</span> и
+              пароль для аутентификации. Доступ в сеть жалует Канцелярия Дворца Palacium Ręgnum.
+            </p>
 
-        {/* форма */}
-        <form onSubmit={submit} className="panel fadeUp mt-6 p-6" style={{ animationDelay: "120ms" }}>
-          {phase === "ok" && grantedTo ? (
-            <div className="siteIn flex flex-col items-center py-6 text-center">
-              <div className="flex h-16 w-16 items-center justify-center border border-[var(--gold)] bg-[rgba(212,175,55,.08)]">
-                <IcShield size={30} className="text-[var(--gold)]" />
+            <button
+              onClick={() => setLegal((l) => !l)}
+              className="mono mt-6 flex w-fit items-center gap-2 text-[10.5px] tracking-[0.2em] text-[var(--txt2)] transition-colors hover:text-[var(--gold2)]"
+            >
+              <IcChevD size={14} className={`transition-transform ${legal ? "rotate-180 text-[var(--gold)]" : ""}`} />
+              ЗАЯВЛЕНИЕ О РЕЖИМЕ СЕКРЕТНОСТИ И ОБРАБОТКЕ ДАННЫХ
+            </button>
+            {legal && (
+              <ol className="siteIn mono mt-3 max-w-md space-y-2 border-l border-[rgba(212,175,55,.4)] pl-4 text-[10.5px] leading-relaxed text-[var(--txt2)]">
+                <li>1. Сеть является собственностью Аргской Империи (Ст. 123 ROTTO).</li>
+                <li>2. Трафик, почта и вызовы ГиКС анализируются алгоритмами ГНИЦСТ (Ст. 1 (187) КГТ).</li>
+                <li>3. Тайна переписки может быть ограничена трибуналом (Ст. 13.1 (22) Toqorro).</li>
+                <li>4. Несанкционированный доступ преследуется по Ст. 14 (79) и Ст. 10 (74) Закона Toqorro.</li>
+              </ol>
+            )}
+          </div>
+
+          {/* форма входа */}
+          <div className="fadeUp" style={{ animationDelay: "120ms" }}>
+            <form
+              key={shake}
+              onSubmit={submit}
+              className={`panel relative border-t-2 border-t-[var(--gold)] p-6 ${shake ? "shake" : ""}`}
+            >
+              <div className="flex items-center justify-between">
+                <h2 className="display text-lg font-bold tracking-wider">ВХОД В СИСТЕМУ</h2>
+                <IcShield size={20} className="text-[var(--gold)]" />
               </div>
-              <p className="mt-4 text-sm leading-relaxed text-[var(--txt)]">
-                Аутентификация пройдена. Добро пожаловать в систему,{" "}
-                <span className="font-bold text-[var(--gold2)]">
-                  {grantedTo.role === "root" ? "Ваше Величество" : `гр. ${grantedTo.name}`}
-                </span>
-                .
-                <br />
-                Ваш текущий статус: <span className="font-semibold">{ROLE_LABEL[grantedTo.role]}</span>. Iŧirinio подтверждён.
-              </p>
-              <p className="mono mt-4 text-[10px] tracking-[0.25em] text-[var(--dim)] blink">ПЕРЕДАЧА МАНДАТА ДОСТУПА…</p>
-            </div>
-          ) : phase === "auth" ? (
-            <div className="mono space-y-2.5 py-6 text-[12px] tracking-[0.15em]">
-              {STEPS.map((s, i) => (
-                <div key={s} className="flex items-center gap-3">
-                  <span
-                    className={
-                      i < step ? "text-[var(--gold)]" : i === step ? "blink text-[var(--txt)]" : "text-[var(--dim)] opacity-40"
-                    }
-                  >
-                    {i < step ? "▣" : "▢"}
-                  </span>
-                  <span className={i < step ? "text-[var(--txt2)]" : i === step ? "text-[var(--txt)]" : "text-[var(--dim)] opacity-40"}>
-                    {s}
-                  </span>
-                  {i < step && <span className="ml-auto text-[10px] text-[var(--gold)]">ОК</span>}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <>
-              <div className="grid gap-4 sm:grid-cols-[1fr_auto]">
-                <div className="space-y-4">
-                  <div>
-                    <label className="mono mb-1.5 block text-[10px] tracking-[0.22em] text-[var(--dim)]">IŦIRINIO</label>
-                    <input
-                      className="field mono text-[15px] tracking-widest"
-                      placeholder="A-000-000"
-                      value={it}
-                      onChange={(e) => setIt(e.target.value)}
-                      autoFocus
-                    />
-                  </div>
-                  <div>
-                    <label className="mono mb-1.5 block text-[10px] tracking-[0.22em] text-[var(--dim)]">ПАРОЛЬ</label>
-                    <div className="relative">
-                      <input
-                        className="field mono pr-11 text-[15px] tracking-widest"
-                        type={show ? "text" : "password"}
-                        placeholder="••••••••"
-                        value={pass}
-                        onChange={(e) => setPass(e.target.value)}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShow((s) => !s)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--dim)] transition-colors hover:text-[var(--gold)]"
-                      >
-                        {show ? <IcEyeOff size={17} /> : <IcEye size={17} />}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-end">
-                  <button type="submit" className="btn btn-gold w-full px-6 py-[1.05rem] sm:w-auto">
-                    <IcLock size={15} /> Войти в систему
-                  </button>
-                </div>
+              <div className="goldline my-4" />
+
+              <label className="mono block text-[10px] tracking-[0.22em] text-[var(--dim)]">
+                IŦIRINIO (НОМЕР ПАСПОРТА)
+              </label>
+              <input
+                value={formatted}
+                onChange={(e) => {
+                  setIt(e.target.value);
+                  setErr(null);
+                }}
+                placeholder="000000000000-000000000000"
+                className="field mono mt-1.5 text-[15px] tracking-[0.08em]"
+                inputMode="numeric"
+                autoComplete="off"
+                disabled={phase !== "idle"}
+              />
+              <p className={`mono mt-1 text-[10px] ${complete ? "text-[var(--gold)]" : "text-[var(--dim)]"}`}>{hint}</p>
+
+              <label className="mono mt-4 block text-[10px] tracking-[0.22em] text-[var(--dim)]">ПАРОЛЬ</label>
+              <div className="relative mt-1.5">
+                <input
+                  value={pass}
+                  onChange={(e) => {
+                    setPass(e.target.value);
+                    setErr(null);
+                  }}
+                  type={showPass ? "text" : "password"}
+                  placeholder="••••••••"
+                  className="field mono pr-10"
+                  disabled={phase !== "idle"}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPass((s) => !s)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--dim)] transition-colors hover:text-[var(--gold)]"
+                >
+                  {showPass ? <IcEyeOff size={16} /> : <IcEye size={16} />}
+                </button>
               </div>
 
-              {error && (
-                <div className="siteIn mt-4 border border-[rgba(194,43,43,.55)] bg-[rgba(139,0,0,.14)] p-3.5">
-                  <p className="mono text-[10px] tracking-[0.25em] text-[var(--red3)]">ОШИБКА АВТОРИЗАЦИИ</p>
-                  <p className="mt-1.5 text-[12.5px] leading-relaxed text-[#e8c9c5]">{error}</p>
+              <button type="submit" disabled={!canSubmit} className="btn btn-gold mt-5 w-full py-3">
+                {phase === "check" ? (
+                  <span className="blink tracking-[0.25em]">ПРОВЕРКА РЕЕСТРА…</span>
+                ) : (
+                  <>
+                    <IcLock size={14} /> Войти в систему
+                  </>
+                )}
+              </button>
+
+              {/* ошибки по нормативным текстам */}
+              {err === "notfound" && (
+                <div className="siteIn mt-4 border border-[var(--red2)] bg-[rgba(139,0,0,.14)] p-3">
+                  <p className="mono text-[10.5px] font-bold tracking-[0.18em] text-[var(--red3)]">ОШИБКА АВТОРИЗАЦИИ</p>
+                  <p className="mt-1.5 text-[12px] leading-relaxed text-[var(--txt2)]">
+                    Указанный идентификатор IŦirinio не найден в Государственном реестре паспортов или
+                    заблокирован. Попытка входа зарегистрирована и передана в Kostosęrio dę Arcanum для анализа.
+                  </p>
+                </div>
+              )}
+              {err === "blocked" && (
+                <div className="siteIn mt-4 border border-[var(--red2)] bg-[rgba(139,0,0,.14)] p-3">
+                  <p className="mono text-[10.5px] font-bold tracking-[0.18em] text-[var(--red3)]">УЧЁТНАЯ ЗАПИСЬ ЗАБЛОКИРОВАНА</p>
+                  <p className="mt-1.5 text-[12px] leading-relaxed text-[var(--txt2)]">
+                    Паспорт числится в реестре, однако доступ приостановлен решением уполномоченного лица.
+                    Обращайтесь в Канцелярию Дворца. Попытка передана в ГНИЦСТ.
+                  </p>
+                </div>
+              )}
+              {err === "badpass" && (
+                <div className="siteIn mt-4 border border-[var(--red2)] bg-[rgba(139,0,0,.14)] p-3">
+                  <p className="mono text-[10.5px] font-bold tracking-[0.18em] text-[var(--red3)]">ОШИБКА АВТОРИЗАЦИИ</p>
+                  <p className="mt-1.5 text-[12px] leading-relaxed text-[var(--txt2)]">
+                    Пароль не принят. Попытка входа зарегистрирована и передана в Kostosęrio dę Arcanum для анализа.
+                  </p>
+                </div>
+              )}
+              {err === "format" && (
+                <p className="siteIn mono mt-3 text-[11px] text-[var(--red3)]">
+                  Формат IŦirinio: 12 цифр, дефис, 12 цифр.
+                </p>
+              )}
+
+              {/* успех */}
+              {phase === "ok" && grantedTo && (
+                <div className="siteIn mt-4 border border-[var(--gold)] bg-[rgba(212,175,55,.08)] p-3">
+                  <p className="text-[12.5px] leading-relaxed text-[var(--txt)]">
+                    Аутентификация пройдена. Добро пожаловать в систему,{" "}
+                    <span className="font-bold text-[var(--gold2)]">{grantedTo.name}</span>.
+                    <br />
+                    Ваш текущий статус: <span className="font-semibold">{ROLE_LABEL[grantedTo.role]}</span>. IŦirinio
+                    подтверждён.
+                  </p>
                 </div>
               )}
 
-              <p className="mt-4 flex items-start gap-2 border-t border-[var(--line)] pt-3.5 text-[11.5px] leading-relaxed text-[var(--dim)]">
-                <span className="mt-0.5 shrink-0 text-[var(--red2)]">▲</span>
-                Предупреждение: несанкционированный доступ преследуется по ст. 14 (79) и ст. 10 (74) Закона Toqorro.
+              <p className="mono mt-4 text-center text-[9px] leading-4 tracking-[0.14em] text-[var(--dim)]">
+                ПРЕДУПРЕЖДЕНИЕ: НЕСАНКЦИОНИРОВАННЫЙ ДОСТУП ПРЕСЛЕДУЕТСЯ ПО СТ. 14 (79) И СТ. 10 (74) ЗАКОНА TOQORRO
               </p>
-            </>
-          )}
-        </form>
+            </form>
 
-        {/* заявление */}
-        <button
-          onClick={() => setLegal((l) => !l)}
-          className="mono mt-4 flex w-full items-center gap-2 px-1 text-[10px] tracking-[0.22em] text-[var(--dim)] transition-colors hover:text-[var(--gold)]"
-        >
-          <IcChevD size={13} className={`transition-transform ${legal ? "rotate-180" : ""}`} />
-          ЗАЯВЛЕНИЕ О РЕЖИМЕ СЕКРЕТНОСТИ И ОБРАБОТКЕ ДАННЫХ
-        </button>
-        {legal && (
-          <ol className="panel siteIn mt-2 space-y-2.5 p-4">
-            {LEGAL_FULL.map((p, i) => (
-              <li key={i} className="flex gap-2.5 text-[12px] leading-relaxed text-[var(--txt2)]">
-                <span className="mono shrink-0 text-[var(--gold)]">{i + 1}.</span>
-                {p}
-              </li>
-            ))}
-          </ol>
-        )}
-
-        {/* демо-доступы */}
-        <div className="panel fadeUp mt-5 p-4" style={{ animationDelay: "200ms" }}>
-          <p className="mono text-[10px] tracking-[0.22em] text-[var(--dim)]">
-            ДЕМОНСТРАЦИОННЫЕ IŦIRINIO ПРОТОТИПА <span className="text-[var(--gold)]">(данные — в вашем браузере)</span>
-          </p>
-          <div className="mt-2.5 grid gap-1.5 sm:grid-cols-2">
-            {DEMO.map((d) => (
-              <button
-                key={d.it}
-                onClick={() => {
-                  setIt(d.it);
-                  setPass(d.pass);
-                  setError(null);
-                  toast(`Реквизиты ${d.it} подставлены в форму`, "info");
-                }}
-                className="group flex items-center gap-2.5 border border-transparent px-2 py-1.5 text-left transition-all hover:border-[var(--line2)] hover:bg-[rgba(212,175,55,.04)]"
-              >
-                <span className="mono text-[12px] font-semibold text-[var(--gold2)] transition-colors group-hover:text-[var(--gold)]">
-                  {d.it}
-                </span>
-                <span className="mono text-[10.5px] text-[var(--dim)]">{d.pass}</span>
-                <span className="ml-auto hidden text-[10.5px] text-[var(--txt2)] md:block">{d.role}</span>
-              </button>
-            ))}
+            {/* демо-доступы прототипа */}
+            <details className="group mt-4 border border-dashed border-[var(--line2)]">
+              <summary className="mono cursor-pointer select-none px-3 py-2 text-[10px] tracking-[0.2em] text-[var(--txt2)] transition-colors hover:text-[var(--gold2)]">
+                ДЕМО-ДОСТУПЫ ПРОТОТИПА (в боевом контуре будут скрыты)
+              </summary>
+              <table className="tbl mono text-[11px]">
+                <thead>
+                  <tr>
+                    <th>IŦirinio</th>
+                    <th>Пароль</th>
+                    <th>Роль</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {DEMO.map((d) => (
+                    <tr key={d.it} className="cursor-pointer" onClick={() => { setIt(d.it); setPass(d.pass); setErr(null); }}>
+                      <td className="text-[var(--gold2)]">{d.it}</td>
+                      <td>{d.pass}</td>
+                      <td className="text-[var(--txt2)]">{d.role}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </details>
           </div>
         </div>
       </div>
 
-      <div className="mono mt-6 text-center text-[9.5px] leading-5 tracking-[0.22em] text-[var(--dim)]">
-        СОБСТВЕННОСТЬ АРГСКОЙ ИМПЕРИИ • СТ. 123 ROTTO • РАЗРАБОТЧИК: KOSTOSĘRIO DĘ ARCANUM (ГНИЦСТ)
-      </div>
+      <div className="goldline" />
+      <footer className="mono flex items-center justify-between px-4 py-2.5 text-[9.5px] tracking-[0.16em] text-[var(--dim)]">
+        <span>{LEGAL_SHORT}</span>
+        <span className="hidden md:block">АРГСКАЯ ИМПЕРИЯ • ГНИЦСТ • ВЕРСИЯ УЗЛА 2.0</span>
+      </footer>
     </div>
   );
 }

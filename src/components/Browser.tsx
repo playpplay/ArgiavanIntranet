@@ -1,17 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   useDB,
-  domainFull,
   findDomain,
   resolveHost,
   unreadCount,
   onToast,
-  toast,
   LEGAL_SHORT,
   LEGAL_FULL,
   ROLE_LABEL,
-  KIND_LABEL,
-  fmtTime,
+  userName,
   type Domain,
   type User,
   type ToastMsg,
@@ -21,7 +18,7 @@ import KrgSite from "./sites/KrgSite";
 import PostSite from "./sites/PostSite";
 import GiksSite from "./sites/GiksSite";
 import KanceSite from "./sites/KanceSite";
-import { BankSite, GnicstSite, AgencySite, ServiceSite, StubSite } from "./sites/OtherSites";
+import { BankSite, ServiceSite } from "./sites/OtherSites";
 
 const TABS = [
   { host: "krg.arg", label: "Портал" },
@@ -32,7 +29,6 @@ const TABS = [
 
 function siteAccess(d: Domain, u: User): boolean {
   if (d.kind === "admin") return u.role === "root" || u.role === "operator";
-  if (d.kind === "monitor") return u.role === "root" || u.role === "tech";
   return true;
 }
 
@@ -42,7 +38,6 @@ export default function Browser({ user, onLogout }: { user: User; onLogout: () =
   const [idx, setIdx] = useState(0);
   const [addr, setAddr] = useState("krg.arg");
   const [loading, setLoading] = useState(false);
-  const [nonce, setNonce] = useState(0);
   const [legal, setLegal] = useState(false);
   const [clock, setClock] = useState(() => new Date());
   const loadTimer = useRef<number | null>(null);
@@ -77,8 +72,7 @@ export default function Browser({ user, onLogout }: { user: User; onLogout: () =
   };
 
   const currentSite = useMemo(() => {
-    if (!domain) return null;
-    if (!allowed) return "denied";
+    if (!domain || !allowed) return null;
     switch (domain.kind) {
       case "portal":
         return <KrgSite user={user} nav={go} mirror={!!domain.mirror} />;
@@ -90,21 +84,18 @@ export default function Browser({ user, onLogout }: { user: User; onLogout: () =
         return <KanceSite user={user} />;
       case "bank":
         return <BankSite user={user} />;
-      case "monitor":
-        return <GnicstSite user={user} />;
-      case "agency":
-        return <AgencySite user={user} agency={domain.agency ?? "kustos"} />;
       case "service":
         return <ServiceSite user={user} onLogout={onLogout} />;
       default:
-        return <StubSite domain={domain} nav={go} />;
+        return <NodeDown domain={domain} go={go} user={user} />;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [host, user, allowed, nonce, unread]);
+  }, [host, user, allowed]);
+
+  const showNodeDown = domain && allowed && (domain.kind === "reserved" || !domain.hosted);
 
   return (
     <div className="flex h-screen flex-col">
-      {/* верхняя панель браузера */}
       <header className="shrink-0 border-b border-[var(--line)] bg-[#0d0d0d]">
         <div className="flex items-center gap-1.5 px-2.5 pt-2">
           <div className="flex items-center gap-1.5 pr-2">
@@ -168,7 +159,10 @@ export default function Browser({ user, onLogout }: { user: User; onLogout: () =
             <IcRefresh size={15} className={loading ? "spin-slow" : ""} />
           </button>
 
-          <form onSubmit={submitAddr} className="mx-1 flex h-8 min-w-0 flex-1 items-center gap-2 border border-[var(--line)] bg-[#0a0a0a] px-2.5 transition-colors focus-within:border-[var(--gold)]">
+          <form
+            onSubmit={submitAddr}
+            className="mx-1 flex h-8 min-w-0 flex-1 items-center gap-2 border border-[var(--line)] bg-[#0a0a0a] px-2.5 transition-colors focus-within:border-[var(--gold)]"
+          >
             <IcLock size={12} className="shrink-0 text-[var(--gold)]" />
             <input
               value={addr}
@@ -190,8 +184,13 @@ export default function Browser({ user, onLogout }: { user: User; onLogout: () =
           <div className="mono hidden items-center gap-2 text-[10px] text-[var(--txt2)] lg:flex">
             <Emblem size={26} />
             <div className="leading-tight">
-              <div className="font-semibold text-[var(--gold2)]">{user.role === "root" ? "Е.И.В. " : "гр. "}{user.name}</div>
-              <div className="text-[9px] text-[var(--dim)]">{ROLE_LABEL[user.role]} • ГиКС {user.giks}</div>
+              <div className="font-semibold text-[var(--gold2)]">
+                {user.role === "root" ? "Е.И.В. " : "гр. "}
+                {user.name}
+              </div>
+              <div className="text-[9px] text-[var(--dim)]">
+                {ROLE_LABEL[user.role]} • ГиКС {user.giks}
+              </div>
             </div>
           </div>
           <button
@@ -205,25 +204,27 @@ export default function Browser({ user, onLogout }: { user: User; onLogout: () =
         <div className="goldline" />
       </header>
 
-      {/* рабочая область */}
       <main className="relative min-h-0 flex-1 overflow-y-auto">
-        <div key={`${host}-${nonce}`} className="siteIn h-full">
+        <div key={host} className="siteIn h-full">
           {loading ? (
             <div className="flex h-full flex-col items-center justify-center gap-4">
               <Emblem size={64} className="spin-slow" />
-              <p className="mono text-[11px] tracking-[0.3em] text-[var(--dim)] blink">ЗАПРОС К УЗЛУ {host.toUpperCase()}…</p>
+              <p className="mono text-[11px] tracking-[0.3em] text-[var(--dim)] blink">
+                ЗАПРОС К УЗЛУ {host.toUpperCase()}…
+              </p>
             </div>
           ) : !domain ? (
             <NotFound host={host} go={go} />
           ) : !allowed ? (
             <Denied host={host} user={user} />
+          ) : showNodeDown ? (
+            <NodeDown domain={domain} go={go} user={user} />
           ) : (
             currentSite
           )}
         </div>
       </main>
 
-      {/* статус-бар */}
       <footer className="mono flex h-8 shrink-0 items-center gap-3 overflow-hidden border-t border-[var(--line)] bg-[#0d0d0d] px-3 text-[9.5px] tracking-[0.14em] text-[var(--dim)]">
         <span className="flex items-center gap-1.5">
           <span className="dot-live inline-block h-1.5 w-1.5 rounded-full bg-[var(--gold)]" />
@@ -236,12 +237,10 @@ export default function Browser({ user, onLogout }: { user: User; onLogout: () =
         <span className="text-[var(--txt2)]">{clock.toLocaleTimeString("ru-RU")}</span>
       </footer>
 
-      {/* герб в углу экрана (ТЗ п.8) */}
       <div className="pointer-events-none fixed bottom-10 right-3 z-30 hidden opacity-40 md:block">
         <Emblem size={64} />
       </div>
 
-      {/* заявление о режиме секретности */}
       {legal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={() => setLegal(false)}>
           <div className="panel w-full max-w-xl border-[rgba(212,175,55,.4)] p-6" onClick={(e) => e.stopPropagation()}>
@@ -283,12 +282,40 @@ function NotFound({ host, go }: { host: string; go: (h: string) => void }) {
         УЗЕЛ <span className="text-[var(--red3)]">{host}</span> НЕ ЧИСЛИТСЯ В РЕЕСТРЕ
       </h1>
       <p className="mt-3 max-w-md text-[13px] leading-relaxed text-[var(--txt2)]">
-        Доменное имя не найдено в государственном реестре зон .arg и .anct. Возможно, домен ещё не выделен
-        Канцелярией либо был исключён из реестра.
+        Доменное имя не найдено в Государственном реестре. Возможно, домен ещё не выделен Канцелярией либо
+        был отозван из реестра.
       </p>
       <div className="mt-6 flex gap-2">
-        <button className="btn" onClick={() => go("registr-не найден")}>Проверить реестр</button>
         <button className="btn btn-gold" onClick={() => go("krg.arg")}>На портал Коллегий</button>
+      </div>
+    </div>
+  );
+}
+
+/** Домен выделен, но служба на узле не поднята — как в настоящей сети. */
+export function NodeDown({ domain, go, user }: { domain: Domain; go: (h: string) => void; user: User }) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center px-6 text-center">
+      <div className="mono text-[11px] tracking-[0.3em] text-[var(--red3)]">ERR_CONNECTION_REFUSED • ПОРТ {domain.port}</div>
+      <h1 className="display mt-4 text-3xl font-extrabold">
+        УЗЕЛ <span className="text-[var(--gold2)]">{domain.name}.{domain.tld}</span> НЕ ОТВЕЧАЕТ
+      </h1>
+      <div className="mt-4 max-w-lg border border-[var(--line)] bg-[rgba(20,20,20,.7)] p-4 text-left">
+        <p className="mono text-[10px] tracking-[0.2em] text-[var(--dim)]">СВЕДЕНИЯ РЕЕСТРА</p>
+        <div className="mono mt-2 space-y-1 text-[12px] text-[var(--txt2)]">
+          <p>АДРЕС: <span className="text-[var(--txt)]">{domain.name}.{domain.tld}</span> — выделен Канцелярией</p>
+          <p>ВЛАДЕЛЕЦ: <span className="text-[var(--txt)]">{userName(domain.owner)}</span> ({domain.owner})</p>
+          <p>ПОРТ: <span className="text-[var(--txt)]">{domain.port}</span> • СЛУЖБА: <span className="text-[var(--red3)]">не поднята</span></p>
+        </div>
+        <p className="mt-3 text-[12px] leading-relaxed text-[var(--txt2)]">
+          {domain.desc} Служба появится, когда владелец разместит на узле свой проект.
+        </p>
+      </div>
+      <div className="mt-6 flex gap-2">
+        <button className="btn" onClick={() => go("krg.arg")}>На портал</button>
+        {(user.role === "root" || user.role === "operator") && (
+          <button className="btn btn-gold" onClick={() => go("kance.arg")}>В Канцелярию</button>
+        )}
       </div>
     </div>
   );
@@ -305,9 +332,9 @@ function Denied({ host, user }: { host: string; user: User }) {
         УЗЕЛ {host.toUpperCase()} — <span className="text-[var(--red3)]">ЗАКРЫТЫЙ КОНТУР</span>
       </h1>
       <p className="mt-3 max-w-lg text-[13px] leading-relaxed text-[var(--txt2)]">
-        Ваш мандат доступа ({ROLE_LABEL[user.role]}, Iŧirinio {user.itirinio}) не предоставляет полномочий для
-        входа на данный узел. Попытка обращения зарегистрирована в журнале аудита и передана в Kostosęrio dę
-        Arcanum для анализа в соответствии со Ст. 1 (187) КГТ.
+        Ваш мандат доступа ({ROLE_LABEL[user.role]}) не предоставляет полномочий для входа на данный узел.
+        Попытка обращения зарегистрирована в журнале аудита и передана в Kostosęrio dę Arcanum для анализа в
+        соответствии со Ст. 1 (187) КГТ.
       </p>
       <p className="mono mt-6 text-[10px] tracking-[0.22em] text-[var(--dim)]">
         САМОВОЛЬНОЕ ПРОНИКНОВЕНИЕ ПРЕСЛЕДУЕТСЯ ПО СТ. 14 (79) ЗАКОНА TOQORRO

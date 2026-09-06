@@ -3,244 +3,248 @@ import {
   useDB,
   createUser,
   deleteUser,
-  toggleBlock,
   resetPassword,
+  setBlocked,
+  createZone,
+  deleteZone,
   registerDomain,
   deleteDomain,
   domainFull,
-  genGiks,
-  KIND_LABEL,
-  ROLE_LABEL,
-  PREFECTURES,
-  prefName,
   fmtDT,
+  fmtDate,
+  PREFS,
+  ROLE_LABEL,
   toast,
   type Role,
-  type SiteKind,
-  type Tld,
   type User,
-  type UserKind,
 } from "../../lib/db";
-import { ENDPOINTS, API_BASE, USE_REMOTE } from "../../lib/api";
-import { Emblem, IcDoc, IcGlobe, IcKey, IcNode, IcPlus, IcStamp, IcTrash, IcUsers } from "../../lib/icons";
+import { API_BASE, API_ENDPOINTS } from "../../lib/api";
+import { IcBan, IcCheck, IcDoc, IcGlobe, IcKey, IcPlus, IcTrash, IcUsers, IcX } from "../../lib/icons";
 
-type Tab = "users" | "domains" | "log" | "api";
+const TABS = [
+  { id: "users", label: "Паспорта и учётные" },
+  { id: "zones", label: "Доменные зоны" },
+  { id: "domains", label: "Домены" },
+  { id: "log", label: "Журнал аудита" },
+  { id: "api", label: "API" },
+];
 
 export default function KanceSite({ user }: { user: User }) {
-  useDB();
+  const db = useDB();
   const isRoot = user.role === "root";
-  const [tab, setTab] = useState<Tab>("users");
+  const [tab, setTab] = useState(isRoot ? "users" : "users");
+  const [newPass, setNewPass] = useState<string | null>(null);
+  const [issued, setIssued] = useState<User | null>(null);
+
+  if (!isRoot && user.role !== "operator") {
+    return (
+      <div className="mx-auto max-w-2xl px-5 py-16 text-center">
+        <h1 className="display text-2xl font-extrabold">ДОСТУП ОГРАНИЧЕН</h1>
+        <p className="mt-3 text-sm text-[var(--txt2)]">Канцелярия ведёт приём только Верховного Администратора и Операторов Коллегий.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-6xl px-5 py-8">
-      <div className="fadeUp flex flex-wrap items-center gap-4">
-        <Emblem size={58} />
-        <div className="min-w-0">
-          <h1 className="display text-2xl font-extrabold tracking-wide sm:text-3xl">
-            КАНЦЕЛЯРИЯ <span className="text-[var(--gold)]">ДВОРЦА</span>
-          </h1>
-          <p className="mono mt-1 text-[10px] tracking-[0.25em] text-[var(--dim)]">
-            KANCE.ARG • ПОРТ 8005 • PALACIUM RĘGNUM • {isRoot ? "ПОЛНЫЙ МАНДАТ ROOT" : "МАНДАТ ОПЕРАТОРА КОЛЛЕГИИ"}
-          </p>
+      <div className="fadeUp flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="mono text-[10px] tracking-[0.3em] text-[var(--dim)]">ДВОРЕЦ PALACIUM RĘGNUM • KANCE.ARG : 8005</p>
+          <h1 className="display mt-2 text-3xl font-extrabold tracking-wide sm:text-4xl">ИМПЕРСКАЯ КАНЦЕЛЯРИЯ</h1>
         </div>
-        <span className="chip chip-gold ml-auto hidden sm:block">DSP</span>
+        <div className="mono text-[10.5px] leading-5 text-[var(--txt2)]">
+          <div>ДЕЖУРНЫЙ: <span className="text-[var(--gold2)]">{user.name}</span></div>
+          <div>МАНДАТ: <span className="text-[var(--gold2)]">{ROLE_LABEL[user.role]}</span></div>
+        </div>
       </div>
       <div className="goldline mt-5" />
 
-      <div className="mt-5 flex flex-wrap gap-1.5">
-        {(
-          [
-            { id: "users", label: isRoot ? "Реестр Iŧirinio" : "Юр. лица и номера", icon: <IcUsers size={14} /> },
-            ...(isRoot
-              ? ([
-                  { id: "domains", label: "Домены .arg / .anct", icon: <IcGlobe size={14} /> },
-                  { id: "log", label: "Журнал аудита", icon: <IcDoc size={14} /> },
-                  { id: "api", label: "Интеграция API", icon: <IcNode size={14} /> },
-                ] as Array<{ id: Tab; label: string; icon: React.ReactNode }>)
-              : []),
-          ] as Array<{ id: Tab; label: string; icon: React.ReactNode }>
-        ).map((t) => (
+      {/* вкладки */}
+      <div className="mt-5 flex flex-wrap gap-2">
+        {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`flex items-center gap-2 border px-4 py-2 text-[11.5px] font-semibold uppercase tracking-wider transition-all ${
-              tab === t.id
-                ? "border-[var(--gold)] bg-[rgba(212,175,55,.09)] text-[var(--gold2)]"
-                : "border-[var(--line)] text-[var(--txt2)] hover:border-[var(--line2)] hover:text-[var(--txt)]"
-            }`}
+            className={`btn px-3.5 py-2 text-[11px] ${tab === t.id ? "border-[var(--gold)] text-[var(--gold2)] bg-[rgba(212,175,55,.08)]" : ""}`}
           >
-            {t.icon}
             {t.label}
           </button>
         ))}
       </div>
 
-      <div className="mt-5">
-        {tab === "users" && <UsersTab isRoot={isRoot} />}
-        {tab === "domains" && isRoot && <DomainsTab />}
-        {tab === "log" && isRoot && <LogTab />}
-        {tab === "api" && isRoot && <ApiTab />}
-      </div>
+      {isRoot && tab === "users" && (
+        <UsersTab onIssued={(u) => setIssued(u)} onNewPass={(p) => setNewPass(p)} />
+      )}
+      {!isRoot && <OperatorTab onIssued={(u) => setIssued(u)} />}
+      {isRoot && tab === "zones" && <ZonesTab />}
+      {isRoot && tab === "domains" && <DomainsTab />}
+      {isRoot && tab === "log" && <LogTab />}
+      {isRoot && tab === "api" && <ApiTab />}
+
+      {/* окно выдачи */}
+      {(issued || newPass) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={() => { setIssued(null); setNewPass(null); }}>
+          <div className="panel w-full max-w-lg border-[rgba(212,175,55,.5)] p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start justify-between">
+              <h3 className="display text-lg font-bold text-[var(--gold2)]">
+                {newPass ? "НОВЫЙ ПАРОЛЬ ВЫПУЩЕН" : "ПАСПОРТ ВЫДАН"}
+              </h3>
+              <button onClick={() => { setIssued(null); setNewPass(null); }} className="text-[var(--dim)] hover:text-[var(--red3)]">
+                <IcX size={18} />
+              </button>
+            </div>
+            <div className="goldline my-4" />
+            {newPass ? (
+              <div>
+                <p className="mono border border-dashed border-[var(--gold)] bg-[#0a0a0a] p-3 text-center text-xl tracking-[0.15em] text-[var(--gold2)]">
+                  {newPass}
+                </p>
+                <p className="mt-3 text-[12.5px] text-[var(--txt2)]">
+                  Передайте пароль владельцу IŦirinio лично или депешей с грифом. Старый пароль аннулирован. Действие внесено в журнал аудита.
+                </p>
+              </div>
+            ) : issued ? (
+              <div className="mono space-y-2 text-[12.5px]">
+                <p className="text-[var(--txt)]">ИМЯ: <span className="text-[var(--gold2)]">{issued.name}</span></p>
+                <p>IŦIRINIO: <span className="break-all text-[var(--gold2)]">{issued.itirinio}</span></p>
+                <p>РОЛЬ: <span className="text-[var(--gold2)]">{ROLE_LABEL[issued.role]}</span></p>
+                <p>ГИКС: <span className="text-[var(--gold2)]">{issued.giks}</span> (префектура {issued.pref})</p>
+                <p>ЛОГИН: <span className="text-[var(--gold2)]">{issued.login}</span></p>
+                <p className="pt-2 text-[11px] leading-5 text-[var(--txt2)]">
+                  Почтовый ящик КЭП и номер ГиКС присвоены автоматически. Выдача зарегистрирована в Государственном реестре и журнале аудита.
+                </p>
+              </div>
+            ) : null}
+            <button className="btn btn-gold mt-5 w-full" onClick={() => { setIssued(null); setNewPass(null); }}>
+              Завершить оформление
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-/* ================= Реестр Iŧirinio ================= */
+/* ---------- паспорта и учётные (root) ---------- */
 
-function UsersTab({ isRoot }: { isRoot: boolean }) {
+function UsersTab({ onIssued, onNewPass }: { onIssued: (u: User) => void; onNewPass: (p: string) => void }) {
   const db = useDB();
-  const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
-  const [login, setLogin] = useState("");
-  const [password, setPassword] = useState("");
-  const [role, setRole] = useState<Role>(isRoot ? "user" : "user");
-  const [kind, setKind] = useState<UserKind>(isRoot ? "citizen" : "legal");
+  const [role, setRole] = useState<Role>("citizen");
   const [pref, setPref] = useState("00");
-  const [balance, setBalance] = useState(100);
-  const [err, setErr] = useState<string | null>(null);
-
-  const previewGiks = useMemo(() => genGiks({ role, kind, pref }), [role, kind, pref]);
+  const [password, setPassword] = useState("");
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const r = createUser({ login, name, password, role: isRoot ? role : "user", kind: isRoot ? kind : "legal", pref, balance });
-    if (r.err) return setErr(r.err);
-    setErr(null);
-    setOpen(false);
-    setName("");
-    setLogin("");
-    setPassword("");
-    toast(`Iŧirinio ${r.user!.itirinio} выдан, ГиКС ${r.user!.giks} присвоен`);
+    const res = createUser({ name, role, password, pref });
+    if (res.err) toast(res.err, "err");
+    else if (res.user) {
+      onIssued(res.user);
+      setName("");
+      setPassword("");
+    }
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="mono text-[10.5px] tracking-[0.2em] text-[var(--dim)]">
-          ГОСУДАРСТВЕННЫЙ РЕЕСТР • {db.users.length} IŦIRINIO
-        </p>
-        <button className="btn btn-gold" onClick={() => setOpen((o) => !o)}>
-          <IcPlus size={14} /> {isRoot ? "Выдать Iŧirinio" : "Регистрировать ЮЛ"}
+    <div className="mt-6 grid gap-4 lg:grid-cols-[380px_1fr]">
+      <form onSubmit={submit} className="panel h-fit p-5">
+        <h3 className="display flex items-center gap-2 text-sm font-bold tracking-wider">
+          <IcPlus size={15} className="text-[var(--gold)]" /> ВЫДАЧА ПАСПОРТА
+        </h3>
+        <div className="goldline my-3" />
+        <label className="mono text-[10px] tracking-[0.2em] text-[var(--dim)]">ИМЯ (Фамилия И.О. / наименование ЮЛ)</label>
+        <input value={name} onChange={(e) => setName(e.target.value)} className="field mt-1" placeholder="Петров И. А." />
+        <label className="mono mt-3 block text-[10px] tracking-[0.2em] text-[var(--dim)]">СОСЛОВИЕ (РОЛЬ)</label>
+        <select value={role} onChange={(e) => setRole(e.target.value as Role)} className="field mt-1">
+          <option value="citizen">Ťivitano — гражданин (номер 17-…)</option>
+          <option value="legal">Юридическое лицо (номер 23-…)</option>
+          <option value="operator">Оператор Коллегии (номер 12-…)</option>
+          <option value="tech">Технический специалист (номер 24-12-…)</option>
+          <option value="moderator">Модератор (номер 24-01-…)</option>
+        </select>
+        {role === "citizen" && (
+          <>
+            <label className="mono mt-3 block text-[10px] tracking-[0.2em] text-[var(--dim)]">ПРЕФЕКТУРА (УКАЗ №24)</label>
+            <select value={pref} onChange={(e) => setPref(e.target.value)} className="field mt-1">
+              {PREFS.map((p) => (
+                <option key={p.code} value={p.code}>
+                  {p.code} — {p.name}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
+        <label className="mono mt-3 block text-[10px] tracking-[0.2em] text-[var(--dim)]">ПАРОЛЬ (НЕ МЕНЕЕ 6 ЗНАКОВ)</label>
+        <input value={password} onChange={(e) => setPassword(e.target.value)} className="field mono mt-1" placeholder="••••••" />
+        <button className="btn btn-gold mt-4 w-full">
+          <IcDoc size={14} /> Выдать IŦirinio и номер ГиКС
         </button>
-      </div>
-
-      {open && (
-        <form onSubmit={submit} className="panel siteIn p-5">
-          <h3 className="display text-base font-bold">НОВЫЙ {isRoot ? "ПОДДАННЫЙ / СЛУЖБА" : "СУБЪЕКТ (ЮРИДИЧЕСКОЕ ЛИЦО)"}</h3>
-          <div className="mt-4 grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
-            <div>
-              <label className="mono mb-1 block text-[9.5px] tracking-[0.2em] text-[var(--dim)]">ФАМИЛИЯ И.О. / НАИМЕНОВАНИЕ</label>
-              <input className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="Сидоров К.М." />
-            </div>
-            <div>
-              <label className="mono mb-1 block text-[9.5px] tracking-[0.2em] text-[var(--dim)]">ЛОГИН (СИСТЕМНЫЙ)</label>
-              <input className="field mono" value={login} onChange={(e) => setLogin(e.target.value)} placeholder="sidorov" />
-            </div>
-            <div>
-              <label className="mono mb-1 block text-[9.5px] tracking-[0.2em] text-[var(--dim)]">ПАРОЛЬ (≥ 6 ЗНАКОВ)</label>
-              <input className="field mono" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••" />
-            </div>
-            {isRoot && (
-              <>
-                <div>
-                  <label className="mono mb-1 block text-[9.5px] tracking-[0.2em] text-[var(--dim)]">СТАТУС ПО ТАБЕЛИ</label>
-                  <select className="field" value={role} onChange={(e) => setRole(e.target.value as Role)}>
-                    {(Object.keys(ROLE_LABEL) as Role[]).map((r) => (
-                      <option key={r} value={r}>{ROLE_LABEL[r]}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="mono mb-1 block text-[9.5px] tracking-[0.2em] text-[var(--dim)]">ТИП СУБЪЕКТА</label>
-                  <select className="field" value={kind} onChange={(e) => setKind(e.target.value as UserKind)}>
-                    <option value="citizen">Ťivitano (гражданин) — префикс 17</option>
-                    <option value="legal">Юридическое лицо — префикс 23</option>
-                  </select>
-                </div>
-              </>
-            )}
-            <div>
-              <label className="mono mb-1 block text-[9.5px] tracking-[0.2em] text-[var(--dim)]">ПРЕФЕКТУРА (УКАЗ № 24)</label>
-              <select className="field" value={pref} onChange={(e) => setPref(e.target.value)}>
-                {PREFECTURES.map((p) => (
-                  <option key={p.code} value={p.code}>{p.code} — {p.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="mono mb-1 block text-[9.5px] tracking-[0.2em] text-[var(--dim)]">НАЧАЛЬНЫЙ СЧЁТ e-T</label>
-              <input className="field mono" type="number" min={0} value={balance} onChange={(e) => setBalance(Number(e.target.value))} />
-            </div>
-          </div>
-          <div className="mono mt-4 flex flex-wrap items-center gap-x-6 gap-y-1 border border-dashed border-[var(--gold)] bg-[rgba(212,175,55,.05)] px-4 py-2.5 text-[11px] text-[var(--txt2)]">
-            <span>IŦIRINIO: <span className="text-[var(--gold2)]">выдаётся автоматически</span></span>
-            <span>ГИКС: <span className="text-[var(--gold2)]">{previewGiks}</span></span>
-          </div>
-          {err && <p className="mono mt-3 border border-[var(--red2)] bg-[rgba(139,0,0,.12)] px-3 py-2 text-[11.5px] text-[var(--red3)]">{err}</p>}
-          <div className="mt-4 flex gap-2">
-            <button type="submit" className="btn btn-gold"><IcStamp size={14} /> Утвердить и внести в реестр</button>
-            <button type="button" className="btn" onClick={() => setOpen(false)}>Отмена</button>
-          </div>
-        </form>
-      )}
+        <p className="mono mt-2 text-[9.5px] leading-4 text-[var(--dim)]">
+          ПАСПОРТ (24 ЦИФРЫ) И НОМЕР ГИКС С КОНТРОЛЬНОЙ ЦИФРОЙ БУДУТ СФОРМИРОВАНЫ АВТОМАТИЧЕСКИ.
+        </p>
+      </form>
 
       <div className="panel overflow-x-auto">
         <table className="tbl">
           <thead>
             <tr>
-              <th>Iŧirinio</th>
-              <th>Имя</th>
-              <th>Статус</th>
+              <th>Подданный</th>
+              <th>IŦirinio</th>
               <th>ГиКС</th>
-              <th>Префектура</th>
-              <th>e-T</th>
+              <th>Роль</th>
+              <th>Статус</th>
               <th className="text-right">Действия</th>
             </tr>
           </thead>
           <tbody>
             {db.users.map((u) => (
-              <tr key={u.login} className={u.blocked ? "opacity-50" : ""}>
-                <td className="mono text-[12px] font-semibold text-[var(--gold2)]">{u.itirinio}</td>
+              <tr key={u.login}>
                 <td>
-                  <div className="font-semibold">{u.name}</div>
-                  <div className="mono text-[10px] text-[var(--dim)]">{u.login}{u.blocked && <span className="text-[var(--red3)]"> • заблокирован</span>}</div>
+                  <div className="font-semibold text-[var(--txt)]">{u.name}</div>
+                  <div className="mono text-[10px] text-[var(--dim)]">{u.login} • с {fmtDate(u.createdAt)}</div>
                 </td>
-                <td><span className={`chip ${u.role === "root" ? "chip-gold" : ""}`}>{ROLE_LABEL[u.role]}{u.kind === "legal" ? " / ЮЛ" : ""}</span></td>
+                <td className="mono text-[11px] text-[var(--gold2)]">{u.itirinio}</td>
                 <td className="mono text-[12px]">{u.giks}</td>
-                <td className="text-[12px] text-[var(--txt2)]">{prefName(u.pref)}</td>
-                <td className="mono text-[12px]">{u.balance.toLocaleString("ru-RU")}</td>
+                <td className="text-[12px] text-[var(--txt2)]">{ROLE_LABEL[u.role]}</td>
                 <td>
-                  <div className="flex justify-end gap-1.5">
-                    <button
-                      className="btn px-2.5 py-1.5 text-[10px]"
-                      title="Перевыпустить пароль"
-                      onClick={() => toast(`Новый пароль для ${u.login}: ${resetPassword(u.login)}`, "info")}
-                    >
-                      <IcKey size={12} />
-                    </button>
-                    <button
-                      className={`btn px-2.5 py-1.5 text-[10px] ${u.blocked ? "btn-verd" : ""}`}
-                      title={u.blocked ? "Разблокировать" : "Заблокировать (ст. 3 (67))"}
-                      onClick={() => {
-                        const r = toggleBlock(u.login);
-                        if (r) toast(r, "err");
-                        else toast(u.blocked ? `Учётная запись ${u.login} разблокирована` : `Учётная запись ${u.login} заблокирована`, u.blocked ? "ok" : "info");
-                      }}
-                    >
-                      {u.blocked ? "Вернуть" : "Блок"}
-                    </button>
-                    {isRoot && (
-                      <button
-                        className="btn btn-danger px-2.5 py-1.5 text-[10px]"
-                        title="Аннулировать Iŧirinio"
-                        onClick={() => {
-                          const r = deleteUser(u.login);
-                          if (r) toast(r, "err");
-                          else toast(`Iŧirinio ${u.login} аннулирован`, "err");
-                        }}
-                      >
-                        <IcTrash size={12} />
-                      </button>
+                  {u.blocked ? (
+                    <span className="chip chip-red">заблокирован</span>
+                  ) : (
+                    <span className="chip" style={{ color: "var(--gold2)", borderColor: "rgba(212,175,55,.5)" }}>
+                      в строю
+                    </span>
+                  )}
+                </td>
+                <td>
+                  <div className="flex justify-end gap-1">
+                    <IconBtn title="Перевыпустить пароль" onClick={() => onNewPass(resetPassword(u.login))}>
+                      <IcKey size={14} />
+                    </IconBtn>
+                    {u.role !== "root" && (
+                      <>
+                        <IconBtn
+                          title={u.blocked ? "Разблокировать" : "Заблокировать"}
+                          danger={!u.blocked}
+                          onClick={() => {
+                            setBlocked(u.login, !u.blocked);
+                            toast(u.blocked ? "Учётная запись разблокирована" : "Учётная запись заблокирована", u.blocked ? "ok" : "info");
+                          }}
+                        >
+                          {u.blocked ? <IcCheck size={14} /> : <IcBan size={14} />}
+                        </IconBtn>
+                        <IconBtn
+                          title="Аннулировать паспорт"
+                          danger
+                          onClick={() => {
+                            if (window.confirm(`Аннулировать паспорт ${u.itirinio} (${u.name})? Действие необратимо.`)) {
+                              const err = deleteUser(u.login);
+                              toast(err ?? "Паспорт аннулирован", err ? "err" : "info");
+                            }
+                          }}
+                        >
+                          <IcTrash size={14} />
+                        </IconBtn>
+                      </>
                     )}
                   </div>
                 </td>
@@ -249,128 +253,277 @@ function UsersTab({ isRoot }: { isRoot: boolean }) {
           </tbody>
         </table>
       </div>
-      {!isRoot && (
-        <p className="mono text-[10.5px] text-[var(--dim)]">
-          МАНДАТ ОПЕРАТОРА КОЛЛЕГИИ: РЕГИСТРАЦИЯ ЮЛ (ПРЕФИКС 23) И ВЫДАЧА ВЕДОМСТВЕННЫХ НОМЕРОВ. БЛОКИРОВКА —
-          ПО СОГЛАСОВАНИЮ СО СТРАЖЕЙ (KUSTOS.ARG).
-        </p>
-      )}
     </div>
   );
 }
 
-/* ================= Домены ================= */
+/* ---------- регистрация ЮЛ (оператор Коллегии) ---------- */
 
-function DomainsTab() {
+function OperatorTab({ onIssued }: { onIssued: (u: User) => void }) {
   const db = useDB();
-  const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
-  const [tld, setTld] = useState<Tld>("arg");
-  const [kind, setKind] = useState<SiteKind>("stub");
-  const [owner, setOwner] = useState("krol");
-  const [desc, setDesc] = useState("");
-  const [err, setErr] = useState<string | null>(null);
+  const [password, setPassword] = useState("");
+  const legals = db.users.filter((u) => u.role === "legal");
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const r = registerDomain({ name, tld, kind, owner, desc });
-    if (r) return setErr(r);
-    setErr(null);
-    setOpen(false);
-    setName("");
-    setDesc("");
-    toast(`Домен ${name}.${tld} выделен, порт назначен автоматически`);
+    const res = createUser({ name, role: "legal", password, pref: "00" });
+    if (res.err) toast(res.err, "err");
+    else if (res.user) {
+      onIssued(res.user);
+      setName("");
+      setPassword("");
+    }
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="mono text-[10.5px] tracking-[0.2em] text-[var(--dim)]">
-          РЕЕСТР ДОМЕННЫХ ЗОН • {db.domains.length} ИМЁН • dnsmasq → nginx → Django
+    <div className="mt-6 grid gap-4 lg:grid-cols-[380px_1fr]">
+      <form onSubmit={submit} className="panel h-fit p-5">
+        <h3 className="display flex items-center gap-2 text-sm font-bold tracking-wider">
+          <IcUsers size={15} className="text-[var(--gold)]" /> РЕГИСТРАЦИЯ ЮРИДИЧЕСКОГО ЛИЦА
+        </h3>
+        <div className="goldline my-3" />
+        <label className="mono text-[10px] tracking-[0.2em] text-[var(--dim)]">НАИМЕНОВАНИЕ</label>
+        <input value={name} onChange={(e) => setName(e.target.value)} className="field mt-1" placeholder="Торговый дом «Наго»" />
+        <label className="mono mt-3 block text-[10px] tracking-[0.2em] text-[var(--dim)]">ПАРОЛЬ</label>
+        <input value={password} onChange={(e) => setPassword(e.target.value)} className="field mono mt-1" placeholder="••••••" />
+        <button className="btn btn-gold mt-4 w-full">Зарегистрировать (номер 23-…)</button>
+        <p className="mono mt-2 text-[9.5px] leading-4 text-[var(--dim)]">
+          ПОЛНОМОЧИЯ ОПЕРАТОРА: ТОЛЬКО ЮРИДИЧЕСКИЕ ЛИЦА. ПАСПОРТА ГРАЖДАНАМ ВЫДАЁТ ВЕРХОВНЫЙ АДМИНИСТРАТОР.
         </p>
-        <button className="btn btn-gold" onClick={() => setOpen((o) => !o)}>
-          <IcPlus size={14} /> Выделить домен
-        </button>
+      </form>
+      <div className="panel overflow-x-auto">
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th>Юридическое лицо</th>
+              <th>IŦirinio</th>
+              <th>ГиКС</th>
+              <th>Регистрация</th>
+            </tr>
+          </thead>
+          <tbody>
+            {legals.map((u) => (
+              <tr key={u.login}>
+                <td className="font-semibold">{u.name}</td>
+                <td className="mono text-[11px] text-[var(--gold2)]">{u.itirinio}</td>
+                <td className="mono text-[12px]">{u.giks}</td>
+                <td className="mono text-[11px] text-[var(--txt2)]">{fmtDate(u.createdAt)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
+    </div>
+  );
+}
 
-      {open && (
-        <form onSubmit={submit} className="panel siteIn p-5">
-          <h3 className="display text-base font-bold">НОВЫЙ УЗЕЛ ARG-NET</h3>
-          <div className="mt-4 grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
-            <div>
-              <label className="mono mb-1 block text-[9.5px] tracking-[0.2em] text-[var(--dim)]">ИМЯ УЗЛА</label>
-              <input className="field mono" value={name} onChange={(e) => setName(e.target.value)} placeholder="kazna" />
-            </div>
-            <div>
-              <label className="mono mb-1 block text-[9.5px] tracking-[0.2em] text-[var(--dim)]">ЗОНА</label>
-              <select className="field" value={tld} onChange={(e) => setTld(e.target.value as Tld)}>
-                <option value="arg">.arg — государственный сектор</option>
-                <option value="anct">.anct — Народная Цифровая Территория</option>
-              </select>
-            </div>
-            <div>
-              <label className="mono mb-1 block text-[9.5px] tracking-[0.2em] text-[var(--dim)]">НАЗНАЧЕНИЕ</label>
-              <select className="field" value={kind} onChange={(e) => setKind(e.target.value as SiteKind)}>
-                {(Object.keys(KIND_LABEL) as SiteKind[]).map((k) => (
-                  <option key={k} value={k}>{KIND_LABEL[k]}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="mono mb-1 block text-[9.5px] tracking-[0.2em] text-[var(--dim)]">ВЛАДЕЛЕЦ (ЛОГИН)</label>
-              <select className="field" value={owner} onChange={(e) => setOwner(e.target.value)}>
-                {db.users.map((u) => (
-                  <option key={u.login} value={u.login}>{u.name} ({u.login})</option>
-                ))}
-              </select>
-            </div>
-            <div className="sm:col-span-2">
-              <label className="mono mb-1 block text-[9.5px] tracking-[0.2em] text-[var(--dim)]">ОПИСАНИЕ</label>
-              <input className="field" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Назначение узла" />
-            </div>
+/* ---------- доменные зоны ---------- */
+
+function ZonesTab() {
+  const db = useDB();
+  const [tld, setTld] = useState("");
+  const [desc, setDesc] = useState("");
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const err = createZone(tld, desc);
+    if (err) toast(err, "err");
+    else {
+      toast(`Доменная зона .${tld.trim().toLowerCase().replace(/^\./, "")} выделена`);
+      setTld("");
+      setDesc("");
+    }
+  };
+
+  return (
+    <div className="mt-6 grid gap-4 lg:grid-cols-[380px_1fr]">
+      <form onSubmit={submit} className="panel h-fit p-5">
+        <h3 className="display flex items-center gap-2 text-sm font-bold tracking-wider">
+          <IcGlobe size={15} className="text-[var(--gold)]" /> ВЫДЕЛЕНИЕ ДОМЕННОЙ ЗОНЫ
+        </h3>
+        <div className="goldline my-3" />
+        <label className="mono text-[10px] tracking-[0.2em] text-[var(--dim)]">ИМЯ ЗОНЫ</label>
+        <div className="mt-1 flex items-center">
+          <span className="display border border-r-0 border-[var(--line)] bg-[#0a0a0a] px-2.5 py-2.5 text-sm text-[var(--gold)]">.</span>
+          <input
+            value={tld}
+            onChange={(e) => setTld(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+            className="field"
+            placeholder="mil"
+          />
+        </div>
+        <label className="mono mt-3 block text-[10px] tracking-[0.2em] text-[var(--dim)]">НАЗНАЧЕНИЕ</label>
+        <input value={desc} onChange={(e) => setDesc(e.target.value)} className="field mt-1" placeholder="Военный контур Империи" />
+        <button className="btn btn-gold mt-4 w-full">Выделить зону</button>
+        <p className="mono mt-2 text-[9.5px] leading-4 text-[var(--dim)]">
+          ВНУТРИ ЗОНЫ ЗАТЕМ ВЫДЕЛЯЮТСЯ ИМЕНА (UZEЛ.ZONA). ЗОНЫ .ARG И .ANCT УЧРЕЖДЕНЫ УКАЗОМ №17 И НЕ УПРАЗДНЯЮТСЯ.
+        </p>
+      </form>
+
+      <div className="panel overflow-x-auto">
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th>Зона</th>
+              <th>Назначение</th>
+              <th>Доменов</th>
+              <th>Учреждена</th>
+              <th className="text-right">Действия</th>
+            </tr>
+          </thead>
+          <tbody>
+            {db.zones.map((z) => {
+              const count = db.domains.filter((d) => d.tld === z.tld).length;
+              return (
+                <tr key={z.tld}>
+                  <td className="display text-base font-bold text-[var(--gold2)]">.{z.tld}</td>
+                  <td className="text-[12.5px] text-[var(--txt2)]">{z.desc}</td>
+                  <td className="mono">{count}</td>
+                  <td className="mono text-[11px] text-[var(--txt2)]">{fmtDate(z.createdAt)}</td>
+                  <td className="text-right">
+                    {z.system ? (
+                      <span className="chip">указ №17</span>
+                    ) : (
+                      <IconBtn
+                        title="Упразднить зону"
+                        danger
+                        onClick={() => {
+                          if (window.confirm(`Упразднить доменную зону .${z.tld}?`)) {
+                            const err = deleteZone(z.tld);
+                            toast(err ?? `Зона .${z.tld} упразднена`, err ? "err" : "info");
+                          }
+                        }}
+                      >
+                        <IcTrash size={14} />
+                      </IconBtn>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- домены ---------- */
+
+function DomainsTab() {
+  const db = useDB();
+  const [name, setName] = useState("");
+  const [tld, setTld] = useState("arg");
+  const [port, setPort] = useState(() => nextPort(db.domains.map((d) => d.port)));
+  const [owner, setOwner] = useState("krol");
+  const [desc, setDesc] = useState("");
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const err = registerDomain({ name, tld, port: Number(port), owner, desc });
+    if (err) toast(err, "err");
+    else {
+      toast(`Домен ${name.trim().toLowerCase()}.${tld} выделен (порт ${port})`);
+      setName("");
+      setDesc("");
+      setPort(nextPort([...db.domains.map((d) => d.port), Number(port)]));
+    }
+  };
+
+  return (
+    <div className="mt-6 grid gap-4 lg:grid-cols-[380px_1fr]">
+      <form onSubmit={submit} className="panel h-fit p-5">
+        <h3 className="display flex items-center gap-2 text-sm font-bold tracking-wider">
+          <IcGlobe size={15} className="text-[var(--gold)]" /> ВЫДЕЛЕНИЕ ДОМЕНА
+        </h3>
+        <div className="goldline my-3" />
+        <label className="mono text-[10px] tracking-[0.2em] text-[var(--dim)]">ИМЯ (ДО ТОЧКИ)</label>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+          className="field mono mt-1"
+          placeholder="obolensk"
+        />
+        <label className="mono mt-3 block text-[10px] tracking-[0.2em] text-[var(--dim)]">ДОМЕННАЯ ЗОНА</label>
+        <select value={tld} onChange={(e) => setTld(e.target.value)} className="field mt-1">
+          {db.zones.map((z) => (
+            <option key={z.tld} value={z.tld}>
+              .{z.tld} — {z.desc}
+            </option>
+          ))}
+        </select>
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <div>
+            <label className="mono text-[10px] tracking-[0.2em] text-[var(--dim)]">ПОРТ УЗЛА</label>
+            <input type="number" value={port} onChange={(e) => setPort(Number(e.target.value))} className="field mono mt-1" />
           </div>
-          {err && <p className="mono mt-3 border border-[var(--red2)] bg-[rgba(139,0,0,.12)] px-3 py-2 text-[11.5px] text-[var(--red3)]">{err}</p>}
-          <div className="mt-4 flex gap-2">
-            <button type="submit" className="btn btn-gold"><IcStamp size={14} /> Внести в реестр</button>
-            <button type="button" className="btn" onClick={() => setOpen(false)}>Отмена</button>
+          <div>
+            <label className="mono text-[10px] tracking-[0.2em] text-[var(--dim)]">ВЛАДЕЛЕЦ</label>
+            <select value={owner} onChange={(e) => setOwner(e.target.value)} className="field mt-1">
+              {db.users.map((u) => (
+                <option key={u.login} value={u.login}>
+                  {u.name}
+                </option>
+              ))}
+            </select>
           </div>
-        </form>
-      )}
+        </div>
+        <label className="mono mt-3 block text-[10px] tracking-[0.2em] text-[var(--dim)]">ОПИСАНИЕ</label>
+        <input value={desc} onChange={(e) => setDesc(e.target.value)} className="field mt-1" placeholder="Родовой архив" />
+        <button className="btn btn-gold mt-4 w-full">Выделить адрес</button>
+        <p className="mono mt-2 text-[9.5px] leading-4 text-[var(--dim)]">
+          ВЫДЕЛЯЕТСЯ АДРЕС С ПОРТОМ. СЛУЖБА ПОЯВИТСЯ, КОГДА ВЛАДЕЛЕЦ РАЗМЕСТИТ СВОЙ ПРОЕКТ НА УЗЛЕ.
+        </p>
+      </form>
 
       <div className="panel overflow-x-auto">
         <table className="tbl">
           <thead>
             <tr>
               <th>Домен</th>
-              <th>Зона</th>
               <th>Назначение</th>
-              <th>Порт</th>
               <th>Владелец</th>
+              <th>Порт</th>
+              <th>Состояние</th>
               <th className="text-right">Действия</th>
             </tr>
           </thead>
           <tbody>
             {db.domains.map((d) => (
               <tr key={domainFull(d)}>
-                <td className="mono text-[12.5px] font-semibold text-[var(--gold2)]">{domainFull(d)}</td>
-                <td><span className={`chip ${d.tld === "arg" ? "chip-gold" : "chip-red"}`}>{d.tld}</span></td>
-                <td className="text-[12.5px] text-[var(--txt2)]">{KIND_LABEL[d.kind]}</td>
-                <td className="mono text-[12px]">:{d.port}</td>
-                <td className="mono text-[12px] text-[var(--txt2)]">{d.owner}</td>
+                <td>
+                  <span className={`mono font-semibold ${d.tld === "arg" ? "text-[var(--gold2)]" : "text-[var(--red3)]"}`}>
+                    {domainFull(d)}
+                  </span>
+                  {d.mirror && <span className="chip ml-2">зеркало</span>}
+                </td>
+                <td className="max-w-[220px] truncate text-[12px] text-[var(--txt2)]">{d.desc}</td>
+                <td className="mono text-[11px] text-[var(--txt2)]">{d.owner}</td>
+                <td className="mono">{d.port}</td>
+                <td>
+                  {d.hosted && d.kind !== "reserved" ? (
+                    <span className="chip" style={{ color: "var(--gold2)", borderColor: "rgba(212,175,55,.5)" }}>в строю</span>
+                  ) : (
+                    <span className="chip">адрес выделен</span>
+                  )}
+                </td>
                 <td className="text-right">
-                  {!d.system ? (
-                    <button
-                      className="btn btn-danger px-2.5 py-1.5 text-[10px]"
+                  {d.system ? (
+                    <span className="chip">указ №17</span>
+                  ) : (
+                    <IconBtn
+                      title="Отозвать домен"
+                      danger
                       onClick={() => {
-                        const r = deleteDomain(domainFull(d));
-                        if (r) toast(r, "err");
-                        else toast(`Домен ${domainFull(d)} исключён из реестра`, "err");
+                        if (window.confirm(`Отозвать домен ${domainFull(d)} из реестра?`)) {
+                          const err = deleteDomain(domainFull(d));
+                          toast(err ?? `Домен ${domainFull(d)} отозван`, err ? "err" : "info");
+                        }
                       }}
                     >
-                      <IcTrash size={12} /> Исключить
-                    </button>
-                  ) : (
-                    <span className="mono text-[9.5px] tracking-[0.15em] text-[var(--dim)]">ЗАЩИЩЁН КОРОНОЙ</span>
+                      <IcTrash size={14} />
+                    </IconBtn>
                   )}
                 </td>
               </tr>
@@ -382,65 +535,92 @@ function DomainsTab() {
   );
 }
 
-/* ================= Журнал ================= */
+function nextPort(ports: number[]): number {
+  let p = 8011;
+  while (ports.includes(p)) p++;
+  return p;
+}
+
+/* ---------- журнал ---------- */
 
 function LogTab() {
   const db = useDB();
   return (
-    <div className="panel max-h-[560px] overflow-y-auto">
+    <div className="panel mt-6 max-h-[520px] overflow-y-auto p-2">
       {db.log.map((l, i) => (
-        <div key={i} className="flex gap-4 border-b border-[var(--line)] px-4 py-2.5 last:border-0">
-          <span className="mono shrink-0 text-[10.5px] text-[var(--dim)]">{fmtDT(l.ts)}</span>
-          <span className="text-[12.5px] text-[var(--txt2)]">{l.text}</span>
+        <div key={i} className="mono flex gap-4 border-b border-[var(--line)] px-3 py-2 text-[12px] last:border-0">
+          <span className="shrink-0 text-[var(--dim)]">{fmtDT(l.ts)}</span>
+          <span className="text-[var(--txt2)]">{l.text}</span>
         </div>
       ))}
     </div>
   );
 }
 
-/* ================= Интеграция API ================= */
+/* ---------- API ---------- */
 
 function ApiTab() {
   return (
-    <div className="space-y-4">
+    <div className="mt-6 grid gap-4 lg:grid-cols-2">
       <div className="panel p-5">
-        <h3 className="display text-base font-bold">БОЕВОЙ КОНТУР: DJANGO REST API</h3>
-        <p className="mt-2 text-[13px] leading-relaxed text-[var(--txt2)]">
-          Прототип использует локальное хранилище браузера. При развёртывании на PythonAnywhere фронтенд
-          отдаётся Django (StaticFiles), данные переходят в единый реестр (PostgreSQL/SQLite), а все действия
-          ниже уходят в REST API через слой <span className="mono text-[var(--gold2)]">src/lib/api.ts</span>{" "}
-          (флаг USE_REMOTE). Схема маршрутизации — по ТЗ п. 2.1: dnsmasq перехватывает *.arg / *.anct, nginx
-          распределяет запросы по портам Django-проектов.
+        <h3 className="display text-sm font-bold tracking-wider">СХЕМА БОЕВОГО КОНТУРА (PYTHONANYWHERE / СЕРВЕР)</h3>
+        <div className="goldline my-3" />
+        <pre className="mono overflow-x-auto text-[11px] leading-5 text-[var(--txt2)]">
+{`Браузер подданного
+  └─ nginx (обратный прокси, Host → порт)
+       ├─ login.arg     : 8000  Django (SSO по IŦirinio)
+       ├─ sb.arg        : 8001  Django StatusBanko
+       ├─ gnicst.anct   : 8002  Django ГНИЦСТ (Ваш проект)
+       ├─ post.arg      : 8003  Django КЭП
+       ├─ call.arg      : 8004  Django ГИКС (сигнализация)
+       ├─ kance.arg     : 8005  Django Канцелярия + REST API
+       ├─ krg.arg       : 8009  этот фронтенд
+       └─ …
+  Локальный DNS (dnsmasq): *.arg, *.anct → 127.0.0.1`}
+        </pre>
+      </div>
+      <div className="panel p-5">
+        <h3 className="display text-sm font-bold tracking-wider">REST API КАНЦЕЛЯРИИ • {API_BASE || "ЛОКАЛЬНЫЙ РЕЖИМ"}</h3>
+        <div className="goldline my-3" />
+        <p className="text-[12px] leading-relaxed text-[var(--txt2)]">
+          Прототип хранит реестр в браузере. При установке флага <span className="mono text-[var(--gold2)]">USE_REMOTE</span> в
+          src/lib/api.ts все действия переключаются на Django REST Framework:
         </p>
-        <div className="mono mt-3 flex flex-wrap gap-x-6 gap-y-1 text-[11px] text-[var(--dim)]">
-          <span>API_BASE: <span className="text-[var(--gold2)]">{API_BASE}</span></span>
-          <span>USE_REMOTE: <span className={USE_REMOTE ? "text-[var(--gold2)]" : "text-[var(--red3)]"}>{String(USE_REMOTE)}</span></span>
+        <div className="mt-3 max-h-[340px] overflow-y-auto">
+          {API_ENDPOINTS.map((e) => (
+            <div key={e.m + e.p} className="mono flex items-center gap-2 border-b border-[var(--line)] py-1.5 text-[11px] last:border-0">
+              <span className={`chip ${["POST", "DELETE"].includes(e.m) ? "chip-red" : "chip-gold"}`}>{e.m}</span>
+              <span className="text-[var(--txt2)]">{e.p}</span>
+            </div>
+          ))}
         </div>
       </div>
-      <div className="panel overflow-x-auto">
-        <table className="tbl">
-          <thead>
-            <tr>
-              <th>Метод</th>
-              <th>Эндпоинт</th>
-              <th>Назначение</th>
-              <th>Доступ</th>
-            </tr>
-          </thead>
-          <tbody>
-            {ENDPOINTS.map((e) => (
-              <tr key={e.method + e.path}>
-                <td>
-                  <span className={`chip ${e.method === "GET" ? "" : e.method === "DELETE" ? "chip-red" : "chip-gold"}`}>{e.method}</span>
-                </td>
-                <td className="mono text-[12px] text-[var(--gold2)]">{API_BASE}{e.path}</td>
-                <td className="text-[12.5px] text-[var(--txt2)]">{e.desc}</td>
-                <td className="mono text-[11px] text-[var(--dim)]">{e.access}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
     </div>
+  );
+}
+
+function IconBtn({
+  children,
+  title,
+  onClick,
+  danger,
+}: {
+  children: React.ReactNode;
+  title: string;
+  onClick: () => void;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      title={title}
+      onClick={onClick}
+      className={`flex h-7 w-7 items-center justify-center border transition-colors ${
+        danger
+          ? "border-[rgba(139,0,0,.5)] text-[var(--red3)] hover:border-[var(--red2)] hover:bg-[rgba(139,0,0,.16)]"
+          : "border-[var(--line2)] text-[var(--txt2)] hover:border-[var(--gold)] hover:text-[var(--gold2)]"
+      }`}
+    >
+      {children}
+    </button>
   );
 }

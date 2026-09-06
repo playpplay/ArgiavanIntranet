@@ -7,7 +7,7 @@ import {
   sendMail,
   setTrashed,
   toast,
-  userByLogin,
+  getDB,
   userName,
   fmtDT,
   type EmailMsg,
@@ -25,7 +25,7 @@ const FOLDERS: Array<{ id: Folder; label: string; icon: React.ReactNode }> = [
 ];
 
 function who(login: string): string {
-  const u = userByLogin(login);
+  const u = getDB().users.find((x) => x.login === login);
   return u ? `${u.name} (${u.itirinio})` : login;
 }
 
@@ -68,9 +68,9 @@ export default function PostSite({ user }: { user: User }) {
   const doSend = (e: React.FormEvent) => {
     e.preventDefault();
     if (!to) return setErr("Укажите получателя по Iŧirinio");
-    if (!body.trim()) return setErr("Содержимое депеши пусто");
+    if (!body.trim()) return setErr("Текст письма пуст");
     sendMail(user.login, to, subject, body);
-    toast(`Депеша доставлена: ${userName(to)} (КЭП, post.arg)`);
+    toast(`Письмо доставлено: ${userName(to)} (КЭП, post.arg)`);
     setView({ mode: "list" });
     setFolder("out");
   };
@@ -80,7 +80,7 @@ export default function PostSite({ user }: { user: User }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="display text-2xl font-extrabold tracking-wide">
-            КЭП — ИМПЕРАТОРСКАЯ <span className="text-[var(--gold)]">ЭЛЕКТРОННАЯ ПОЧТА</span>
+            КЭП — ЕДИНАЯ <span className="text-[var(--gold)]">ПОЧТА АРГИИ</span>
           </h1>
           <p className="mono mt-1 text-[10px] tracking-[0.22em] text-[var(--dim)]">
             POST.ARG • ПОРТ 8003 • ЯЩИК: {user.itirinio}
@@ -88,7 +88,7 @@ export default function PostSite({ user }: { user: User }) {
         </div>
         {view.mode !== "compose" && (
           <button className="btn btn-gold" onClick={() => startCompose()}>
-            <IcSend size={14} /> Новая депеша
+            <IcSend size={14} /> Написать письмо
           </button>
         )}
       </div>
@@ -116,7 +116,7 @@ export default function PostSite({ user }: { user: User }) {
           ))}
           <div className="panel hidden flex-1 p-3.5 lg:block">
             <p className="mono text-[9.5px] leading-5 tracking-[0.12em] text-[var(--dim)]">
-              СОГЛАСНО СТ. 1 (187) КГТ ВСЕ ДЕПЕШИ АРХИВИРУЮТСЯ И АНАЛИЗИРУЮТСЯ ГНИЦСТ. ТАЙНА ПЕРЕПИСКИ — СТ.
+              СОГЛАСНО СТ. 1 (187) КГТ ВСЕ ПИСЬМА АРХИВИРУЮТСЯ И АНАЛИЗИРУЮТСЯ ГНИЦСТ. ТАЙНА ПЕРЕПИСКИ — СТ.
               13.1 (22) TOQORRO.
             </p>
           </div>
@@ -129,7 +129,7 @@ export default function PostSite({ user }: { user: User }) {
               {list.length === 0 && (
                 <div className="flex h-full flex-col items-center justify-center py-20 text-center">
                   <IcMail size={30} className="text-[var(--dim)]" />
-                  <p className="mono mt-3 text-[11px] tracking-[0.2em] text-[var(--dim)]">ДЕПЕШЕЙ НЕТ</p>
+                  <p className="mono mt-3 text-[11px] tracking-[0.2em] text-[var(--dim)]">ПИСЕМ НЕТ</p>
                 </div>
               )}
               {list.map((m) => {
@@ -178,7 +178,7 @@ export default function PostSite({ user }: { user: User }) {
                       onClick={() => {
                         setTrashed(view.msg.id, true);
                         setView({ mode: "list" });
-                        toast("Депеша перемещена в корзину", "info");
+                        toast("Письмо перемещено в корзину", "info");
                       }}
                     >
                       <IcTrash size={13} /> В корзину
@@ -196,7 +196,7 @@ export default function PostSite({ user }: { user: User }) {
                       onClick={() => {
                         setTrashed(view.msg.id, false);
                         setView({ mode: "list" });
-                        toast("Депеша восстановлена", "info");
+                        toast("Письмо восстановлено", "info");
                       }}
                     >
                       Восстановить
@@ -206,7 +206,7 @@ export default function PostSite({ user }: { user: User }) {
                       onClick={() => {
                         purgeMail(view.msg.id);
                         setView({ mode: "list" });
-                        toast("Депеша уничтожена безвозвратно", "err");
+                        toast("Письмо уничтожено безвозвратно", "err");
                       }}
                     >
                       <IcX size={13} /> Уничтожить
@@ -229,7 +229,7 @@ export default function PostSite({ user }: { user: User }) {
           {view.mode === "compose" && (
             <form onSubmit={doSend} className="siteIn flex h-full flex-col p-5">
               <h2 className="display text-lg font-extrabold">
-                {view.replyTo ? `ОТВЕТ: ${view.replyTo.from.toUpperCase()}` : "НОВАЯ ДЕПЕША"}
+                {view.replyTo ? `ОТВЕТ: ${view.replyTo.from.toUpperCase()}` : "НОВОЕ ПИСЬМО"}
               </h2>
               <div className="mt-4 space-y-3.5">
                 <div>
@@ -245,7 +245,7 @@ export default function PostSite({ user }: { user: User }) {
                 </div>
                 <div>
                   <label className="mono mb-1.5 block text-[10px] tracking-[0.2em] text-[var(--dim)]">ТЕМА</label>
-                  <input className="field" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Тема депеши" />
+                  <input className="field" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Тема письма" />
                 </div>
                 <div className="flex-1">
                   <label className="mono mb-1.5 block text-[10px] tracking-[0.2em] text-[var(--dim)]">СОДЕРЖАНИЕ</label>
@@ -253,7 +253,7 @@ export default function PostSite({ user }: { user: User }) {
                     className="field h-44 resize-none leading-6 lg:h-56"
                     value={body}
                     onChange={(e) => setBody(e.target.value)}
-                    placeholder="Текст депеши…"
+                    placeholder="Текст письма…"
                   />
                 </div>
               </div>
