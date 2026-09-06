@@ -19,7 +19,8 @@ import KrgSite from "./sites/KrgSite";
 import PostSite from "./sites/PostSite";
 import GiksSite from "./sites/GiksSite";
 import KanceSite from "./sites/KanceSite";
-import { BankSite, ServiceSite } from "./sites/OtherSites";
+import BankSite from "./sites/BankSite";
+import { ServiceSite } from "./sites/OtherSites";
 
 const TABS = [
   { host: "krg.arg", label: "Портал" },
