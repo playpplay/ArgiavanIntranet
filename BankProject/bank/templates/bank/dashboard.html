@@ -1,0 +1,286 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <!-- Приветствие и общий баланс -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col-md-8">
+                        <h2 class="card-title mb-2">
+                            Добро пожаловать, {{ user.first_name|default:user.username }}!
+                        </h2>
+                        <p class="text-muted mb-0">
+                            <i class="fas fa-user"></i> {{ user.username }}
+                            {% if user.email %} | <i class="fas fa-envelope"></i> {{ user.email }}{% endif %}
+                        </p>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <h3 class="mb-0">
+                            <span class="badge bg-primary fs-4">
+                                {{ total_balance|floatformat:2 }} {{ display_currency.symbol }}
+                            </span>
+                        </h3>
+                        <small class="text-muted">Общий баланс в {{ display_currency.name }}</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Мои счета -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-wallet"></i> Мои счета
+                    <span class="badge bg-secondary ms-2">{{ accounts.count }}</span>
+                </h5>
+                <div>
+                    <span class="badge bg-success me-2">Активных: {{ active_accounts }}</span>
+                    {% if pending_accounts > 0 %}
+                        <span class="badge bg-warning">На рассмотрении: {{ pending_accounts }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="card-body">
+                {% if accounts %}
+                    <div class="row">
+                        {% for account in accounts %}
+                            <div class="col-md-6 mb-3">
+                                <div class="card h-100 {% if account.status == 'PENDING' %}border-warning{% elif account.status == 'FROZEN' %}border-danger{% endif %}">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between align-items-start">
+                                            <h6 class="card-title mb-1">
+                                                {{ account.get_account_type_display }}
+                                                {% if account.status == 'PENDING' %}
+                                                    <span class="badge bg-warning">На рассмотрении</span>
+                                                {% elif account.status == 'FROZEN' %}
+                                                    <span class="badge bg-danger">Заморожен</span>
+                                                {% endif %}
+                                            </h6>
+                                            <span class="badge bg-info">{{ account.currency.code }}</span>
+                                        </div>
+
+                                        <p class="mb-1">
+                                            <small class="text-muted">Номер:</small><br>
+                                            <code>{{ account.account_number }}</code>
+                                        </p>
+
+                                        <p class="mb-1">
+                                            <small class="text-muted">Баланс:</small><br>
+                                            <span class="h5 {% if account.balance < 0 %}text-danger{% elif account.balance > 0 %}text-success{% endif %}">
+                                                {{ account.balance|floatformat:15 }} {{ account.currency.symbol }}
+                                            </span>
+                                        </p>
+
+                                        {% if account.status == 'ACTIVE' %}
+                                            <div class="mt-2">
+                                                <small class="text-muted">Действия:</small>
+                                                <div class="btn-group btn-group-sm mt-1" role="group">
+                                                    <a href="{% url 'account_detail' account.id %}"
+                                                       class="btn btn-outline-primary btn-sm">
+                                                        <i class="fas fa-eye"></i> Подробнее
+                                                    </a>
+                                                    {% if account.status == 'ACTIVE' and account.account_type != 'CREDIT' %}
+                                                        <a href="{% url 'transfer' %}" class="btn btn-outline-success btn-sm">
+                                                            <i class="fas fa-exchange-alt"></i> Перевести
+                                                        </a>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                        {% elif account.status == 'PENDING' %}
+                                            <div class="alert alert-warning mt-2 mb-0 py-1 small">
+                                                <i class="fas fa-clock"></i> Счет ожидает активации администратором
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> У вас пока нет счетов.
+                    </div>
+                {% endif %}
+
+                <div class="mt-3">
+                    <a href="{% url 'open_account' %}" class="btn btn-primary">
+                        <i class="fas fa-plus-circle"></i> Открыть новый счет
+                    </a>
+                    {% if pending_accounts > 0 %}
+                        <a href="{% url 'pending_accounts' %}" class="btn btn-warning ms-2">
+                            <i class="fas fa-clock"></i> Счета на рассмотрении: {{ pending_accounts }}
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Последние транзакции -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-history"></i> Последние операции
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if recent_transactions %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Дата</th>
+                                    <th>Операция</th>
+                                    <th>Сумма</th>
+                                    <th>Статус</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for transaction in recent_transactions %}
+                                    <tr>
+                                        <td>{{ transaction.timestamp|date:"d.m.Y H:i" }}</td>
+                                        <td>
+                                            {{ transaction.transaction_type.name }}
+                                            {% if transaction.description %}
+                                                <br><small class="text-muted">{{ transaction.description|truncatechars:30 }}</small>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if transaction.from_account and transaction.from_account.user == user %}
+                                                <span class="text-danger">-{{ transaction.amount|floatformat:2 }} {{ transaction.from_account.currency.symbol }}</span>
+                                            {% else %}
+                                                <span class="text-success">+{{ transaction.amount|floatformat:2 }} {{ transaction.to_account.currency.symbol }}</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if transaction.is_completed %}
+                                                <span class="badge bg-success">Завершена</span>
+                                            {% else %}
+                                                <span class="badge bg-warning">В обработке</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="text-center mt-2">
+                        <a href="{% url 'transactions' %}" class="btn btn-outline-primary btn-sm">
+                            <i class="fas fa-list"></i> Вся история операций
+                        </a>
+                    </div>
+                {% else %}
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> У вас пока нет операций.
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <!-- Быстрое меню -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0"><i class="fas fa-bolt"></i> Быстрые действия</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a href="{% url 'transfer' %}" class="btn btn-outline-primary">
+                        <i class="fas fa-exchange-alt"></i> Перевод средств
+                    </a>
+                    <a href="{% url 'open_account' %}" class="btn btn-outline-success">
+                        <i class="fas fa-plus-circle"></i> Открыть счет
+                    </a>
+                    <a href="{% url 'transactions' %}" class="btn btn-outline-info">
+                        <i class="fas fa-history"></i> История операций
+                    </a>
+                    <a href="{% url 'profile' %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-user"></i> Мой профиль
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Валюта отображения -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0"><i class="fas fa-globe"></i> Валюта отображения</h5>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'change_currency' %}" class="mb-0">
+                    {% csrf_token %}
+                    <div class="input-group">
+                        <select name="currency" class="form-select" onchange="this.form.submit()">
+                            {% for currency in available_currencies %}
+                                <option value="{{ currency.id }}"
+                                    {% if currency.id == display_currency.id %}selected{% endif %}>
+                                    {{ currency.name }} ({{ currency.symbol }})
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <small class="text-muted mt-2 d-block">
+                        <i class="fas fa-info-circle"></i> Все суммы будут отображаться в выбранной валюте
+                    </small>
+                </form>
+            </div>
+        </div>
+
+        <!-- Информация о системе -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0"><i class="fas fa-info-circle"></i> Информация</h5>
+            </div>
+            <div class="card-body">
+                <ul class="list-unstyled mb-0">
+                    <li class="mb-2">
+                        <i class="fas fa-user-check text-success me-2"></i>
+                        <strong>Статус:</strong> Активен
+                    </li>
+                    <li class="mb-2">
+                        <i class="fas fa-calendar-alt text-primary me-2"></i>
+                        <strong>Регистрация:</strong> {{ user.date_joined|date:"d.m.Y" }}
+                    </li>
+                    <li class="mb-2">
+                        <i class="fas fa-wallet text-info me-2"></i>
+                        <strong>Счетов:</strong> {{ accounts.count }}
+                    </li>
+                    <li class="mb-2">
+                        <i class="fas fa-clock text-warning me-2"></i>
+                        <strong>На рассмотрении:</strong> {{ pending_accounts }}
+                    </li>
+                    {% if user.passport_number %}
+                    <li class="mb-2">
+                        <i class="fas fa-passport text-secondary me-2"></i>
+                        <strong>Паспорт:</strong> {{ user.passport_number }}
+                    </li>
+                    {% endif %}
+                </ul>
+                <hr>
+                <div class="alert alert-warning small mb-0">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <strong>Важно:</strong> Новые счета открываются со статусом "На рассмотрении" и требуют активации администратором.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.card-title {
+    font-weight: 600;
+}
+.badge {
+    font-size: 0.8em;
+}
+.code {
+    font-family: 'Courier New', monospace;
+    background-color: #f8f9fa;
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-size: 0.9em;
+}
+</style>
+{% endblock %}

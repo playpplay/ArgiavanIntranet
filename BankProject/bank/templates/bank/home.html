@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row justify-content-center mt-5">
+    <div class="col-md-8 text-center">
+        <h1 class="display-4 mb-4">Добро пожаловать в НацБанк Аргии</h1>
+        <p class="lead mb-4">Надежные банковские услуги в Аргских Йенах (ARY)</p>
+
+        <div class="row mt-5">
+            <div class="col-md-4 mb-4">
+                <div class="card account-card h-100">
+                    <div class="card-body">
+                        <h5 class="card-title">💰 Переводы</h5>
+                        <p class="card-text">Мгновенные переводы между счетами в ARY</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-4">
+                <div class="card account-card h-100">
+                    <div class="card-body">
+                        <h5 class="card-title">📊 История операций</h5>
+                        <p class="card-text">Полная история всех операций по вашим счетам</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-4">
+                <div class="card account-card h-100">
+                    <div class="card-body">
+                        <h5 class="card-title">🔒 Безопасность</h5>
+                        <p class="card-text">Надежная защита ваших средств и персональных данных</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        {% if not user.is_authenticated %}
+            <div class="mt-4">
+                <a href="{% url 'login' %}" class="btn btn-primary btn-lg me-3">Войти в систему</a>
+                <a href="{% url 'register' %}" class="btn btn-outline-primary btn-lg">Зарегистрироваться</a>
+            </div>
+        {% else %}
+            <div class="mt-4">
+                <a href="{% url 'dashboard' %}" class="btn btn-primary btn-lg">Перейти в личный кабинет</a>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

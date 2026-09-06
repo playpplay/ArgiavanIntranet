@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header bg-danger text-white">
+                <h3 class="card-title mb-0">Применение налогового вычета</h3>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-warning">
+                    <h5 class="alert-heading">Внимание!</h5>
+                    <p>Вы собираетесь применить налоговый вычет 13% ко всем активным счетам с положительным балансом.</p>
+                    <hr>
+                    <p class="mb-0">
+                        <strong>Количество счетов для вычета:</strong> {{ accounts_count }}<br>
+                        <strong>Общая сумма вычета:</strong> {{ total_tax }} ARY<br>
+                        <strong>Ставка:</strong> 13% от баланса каждого счета
+                    </p>
+                </div>
+                
+                {% if accounts %}
+                    <h5>Примеры счетов для вычета:</h5>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Счет</th>
+                                    <th>Баланс</th>
+                                    <th>Вычет (13%)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for account in accounts %}
+                                    <tr>
+                                        <td>{{ account.account_number }}</td>
+                                        <td>{{ account.balance }} ARY</td>
+                                        <td>{{ account.balance|floatformat:2 }} * 13% = {{ account.balance|floatformat:2|add:"0"|floatformat:2 }} ARY</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% endif %}
+                
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-danger">Применить налоговый вычет ко всем счетам</button>
+                        <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary">Отмена</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

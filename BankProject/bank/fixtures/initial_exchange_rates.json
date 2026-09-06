@@ -1,0 +1,54 @@
+[
+    {
+        "model": "bank.exchangerate",
+        "pk": 1,
+        "fields": {
+            "from_currency": 1,
+            "to_currency": 2,
+            "rate": "0.03",
+            "is_active": true,
+            "valid_from": "2024-01-08T10:00:00Z",
+            "valid_to": null,
+            "created_at": "2024-01-08T10:00:00Z"
+        }
+    },
+    {
+        "model": "bank.exchangerate",
+        "pk": 2,
+        "fields": {
+            "from_currency": 2,
+            "to_currency": 1,
+            "rate": "33.33",
+            "is_active": true,
+            "valid_from": "2024-01-08T10:00:00Z",
+            "valid_to": null,
+            "created_at": "2024-01-08T10:00:00Z"
+        }
+    },
+    {
+        "model": "bank.exchangerate",
+        "pk": 3,
+        "fields": {
+            "from_currency": 1,
+            "to_currency": 3,
+            "rate": "0.01",
+            "is_active": true,
+            "valid_from": "2024-01-08T10:00:00Z",
+            "valid_to": null,
+            "created_at": "2024-01-08T10:00:00Z"
+        }
+    },
+    {
+        "model": "bank.exchangerate",
+        "pk": 4,
+        "fields": {
+            "from_currency": 3,
+            "to_currency": 1,
+            "rate": "100.00",
+            "is_active": true,
+            "valid_from": "2024-01-08T10:00:00Z",
+            "valid_to": null,
+            "created_at": "2024-01-08T10:00:00Z"
+        }
+    }
+]

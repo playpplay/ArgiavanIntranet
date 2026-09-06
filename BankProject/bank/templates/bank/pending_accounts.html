@@ -1,0 +1,114 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title mb-0">
+                    <i class="fas fa-clock"></i> Счета на рассмотрении
+                </h3>
+            </div>
+            <div class="card-body">
+                {% if pending_accounts %}
+                    <div class="alert alert-info mb-4">
+                        <h5><i class="fas fa-info-circle"></i> Информация о статусе счетов</h5>
+                        <ul class="mb-0">
+                            <li>Счета со статусом <strong>"На рассмотрении"</strong> ожидают активации администратором</li>
+                            <li>Вы не можете совершать операции с этими счетами до их активации</li>
+                            <li>Максимальное количество счетов на рассмотрении: <strong>2</strong></li>
+                            <li>Текущее количество: <strong>{{ pending_count }}</strong></li>
+                        </ul>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Номер счета</th>
+                                    <th>Тип счета</th>
+                                    <th>Валюта</th>
+                                    <th>Баланс</th>
+                                    <th>Дата создания</th>
+                                    <th>Статус</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for account in pending_accounts %}
+                                    <tr>
+                                        <td>
+                                            <code>{{ account.account_number }}</code>
+                                        </td>
+                                        <td>{{ account.get_account_type_display }}</td>
+                                        <td>
+                                            <span class="badge bg-info">{{ account.currency.code }}</span>
+                                            <br>
+                                            <small class="text-muted">{{ account.currency.name }}</small>
+                                        </td>
+                                        <td>
+                                            <span class="h5">
+                                                {{ account.balance|floatformat:2 }} {{ account.currency.symbol }}
+                                            </span>
+                                        </td>
+                                        <td>{{ account.created_at|date:"d.m.Y H:i" }}</td>
+                                        <td>
+                                            <span class="badge bg-warning">На рассмотрении</span>
+                                            <br>
+                                            <small class="text-muted">Ожидает активации</small>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="alert alert-warning mt-4">
+                        <h5><i class="fas fa-exclamation-triangle"></i> Важно</h5>
+                        <p class="mb-0">
+                            Пока счета находятся на рассмотрении, вы не можете:
+                        </p>
+                        <ul class="mb-0">
+                            <li>Совершать переводы с этих счетов</li>
+                            <li>Получать переводы на эти счета</li>
+                            <li>Использовать средства на этих счетах</li>
+                        </ul>
+                        <p class="mt-2 mb-0">
+                            Для ускорения процесса активации обратитесь в службу поддержки или к администратору системы.
+                        </p>
+                    </div>
+                {% else %}
+                    <div class="alert alert-success">
+                        <h5><i class="fas fa-check-circle"></i> У вас нет счетов на рассмотрении</h5>
+                        <p class="mb-2">Все ваши счета активированы и готовы к использованию.</p>
+                        <p class="mb-0">
+                            Вы можете открыть новый счет, но помните, что он будет иметь статус "На рассмотрении" до активации администратором.
+                        </p>
+                    </div>
+                {% endif %}
+
+                <div class="d-grid gap-2 d-md-flex mt-4">
+                    <a href="{% url 'dashboard' %}" class="btn btn-primary me-md-2">
+                        <i class="fas fa-arrow-left"></i> Вернуться в личный кабинет
+                    </a>
+                    {% if pending_count < 2 %}
+                        <a href="{% url 'open_account' %}" class="btn btn-success">
+                            <i class="fas fa-plus-circle"></i> Открыть новый счет
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.table th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+}
+.badge {
+    font-size: 0.85em;
+    padding: 0.35em 0.65em;
+}
+</style>
+{% endblock %}
