@@ -6,7 +6,7 @@ import {
   txsFor,
   fmtDT,
   userName,
-  ROLE_LABEL,
+  roleLabel,
   toast,
   type User,
 } from "../../lib/db";
@@ -146,7 +146,7 @@ export function ServiceSite({ user, onLogout }: { user: User; onLogout: () => vo
         <div className="mono space-y-2 text-[12px] text-[var(--txt2)]">
           <p>ДЕРЖАТЕЛЬ: <span className="text-[var(--gold2)]">{user.name}</span></p>
           <p>IŦIRINIO: <span className="break-all text-[var(--gold2)]">{user.itirinio}</span></p>
-          <p>СТАТУС: <span className="text-[var(--gold2)]">{ROLE_LABEL[user.role]}</span></p>
+          <p>СТАТУС: <span className="text-[var(--gold2)]">{roleLabel(user.role)}</span></p>
           <p>ГИКС: <span className="text-[var(--gold2)]">{user.giks}</span></p>
         </div>
       </div>

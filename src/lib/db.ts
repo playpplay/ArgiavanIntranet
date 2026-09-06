@@ -5,8 +5,26 @@ import { useSyncExternalStore } from "react";
    Боевой контур: Django + PostgreSQL, эндпоинты — см. api.ts
    ============================================================ */
 
-export type Role = "root" | "tech" | "moderator" | "operator" | "citizen" | "legal";
+export type Role = string; // идентификатор сословия из реестра ролей
 export type SiteKind = "portal" | "mail" | "voip" | "admin" | "bank" | "service" | "reserved";
+
+/** Сословие (роль) из Государственного реестра сословий. */
+export interface RoleDef {
+  id: string;
+  label: string;
+  prefix: string; // паттерн ГиКС, напр. "12", "24-01"
+  seq: 3 | 5; // разрядность порядкового номера
+  usePref: boolean; // включать код префектуры в номер ГиКС
+  admin: boolean; // доступ к Канцелярии
+  legal: boolean; // сословие юридического лица
+  builtin?: boolean;
+}
+/** Префектура из реестра (Указ №24 и последующие расширения). */
+export interface PrefDef {
+  code: string; // 2 цифры
+  name: string;
+  builtin?: boolean;
+}
 
 export interface User {
   login: string;
@@ -71,6 +89,8 @@ export interface LogEntry {
 export interface DB {
   v: number;
   users: User[];
+  roles: RoleDef[];
+  prefs: PrefDef[];
   zones: Zone[];
   domains: Domain[];
   emails: EmailMsg[];
@@ -79,14 +99,16 @@ export interface DB {
   log: LogEntry[];
 }
 
-export const ROLE_LABEL: Record<Role, string> = {
-  root: "Верховный Администратор",
-  tech: "Технический специалист",
-  moderator: "Модератор",
-  operator: "Оператор Коллегии",
-  citizen: "Ťivitano",
-  legal: "Юридическое лицо",
-};
+export function roleDef(id: Role): RoleDef | undefined {
+  return getDB().roles.find((r) => r.id === id);
+}
+export function roleLabel(id: Role): string {
+  return roleDef(id)?.label ?? id;
+}
+/** Мандат доступа к Канцелярии (root или сословие с правом оператора). */
+export function isAdmin(u: User): boolean {
+  return u.role === "root" || roleDef(u.role)?.admin === true;
+}
 
 export const KIND_LABEL: Record<SiteKind, string> = {
   portal: "Портал",
@@ -108,16 +130,7 @@ export const KIND_LETTER: Record<SiteKind, string> = {
   reserved: "—",
 };
 
-export const PREFS: Array<{ code: string; name: string }> = [
-  { code: "00", name: "Столица Йент" },
-  { code: "01", name: "Префектура Наго" },
-  { code: "02", name: "Префектура Накио" },
-  { code: "03", name: "Префектура Ярикава" },
-  { code: "04", name: "Префектура Кагиото" },
-  { code: "05", name: "Префектура Канаканэ" },
-  { code: "06", name: "Провинция Катэ" },
-  { code: "99", name: "Служебные коды" },
-];
+
 
 export const LEGAL_SHORT =
   "Собственность Империи Аргия • Ст. 123 ROTTO • КГТ Ст. 1 (187): трафик анализируется ГНИЦСТ";
@@ -132,15 +145,15 @@ export const LEGAL_FULL = [
 
 /* ---------- сид ---------- */
 
-const KEY = "argnet-db-v3";
-const SKEY = "argnet-session-v3";
+const KEY = "argnet-db-v4";
+const SKEY = "argnet-session-v4";
 const H = 3_600_000;
 const D = 24 * H;
 const NOW = Date.now();
 
 function seed(): DB {
   return {
-    v: 2,
+    v: 3,
     users: [
       {
         login: "krol",
@@ -208,6 +221,24 @@ function seed(): DB {
         blocked: false,
         createdAt: NOW - 300 * D,
       },
+    ],
+    roles: [
+      { id: "root", label: "Верховный Администратор", prefix: "12", seq: 3, usePref: false, admin: true, legal: false, builtin: true },
+      { id: "operator", label: "Оператор Коллегии", prefix: "12", seq: 3, usePref: false, admin: true, legal: false, builtin: true },
+      { id: "citizen", label: "Ťivitano", prefix: "17", seq: 5, usePref: true, admin: false, legal: false, builtin: true },
+      { id: "legal", label: "Юридическое лицо", prefix: "23-00", seq: 5, usePref: false, admin: false, legal: true, builtin: true },
+      { id: "tech", label: "Технический специалист", prefix: "24-12", seq: 3, usePref: false, admin: false, legal: false, builtin: true },
+      { id: "moderator", label: "Модератор", prefix: "24-01", seq: 3, usePref: false, admin: false, legal: false, builtin: true },
+    ],
+    prefs: [
+      { code: "00", name: "Столица Йент", builtin: true },
+      { code: "01", name: "Префектура Наго", builtin: true },
+      { code: "02", name: "Префектура Накио", builtin: true },
+      { code: "03", name: "Префектура Ярикава", builtin: true },
+      { code: "04", name: "Префектура Кагиото", builtin: true },
+      { code: "05", name: "Префектура Канаканэ", builtin: true },
+      { code: "06", name: "Провинция Катэ", builtin: true },
+      { code: "99", name: "Служебные коды", builtin: true },
     ],
     zones: [
       { tld: "arg", desc: "Государственная зона Империи: учреждения, службы, официальные узлы.", createdAt: NOW - 780 * D, system: true },
@@ -409,26 +440,24 @@ function nextSeq(db: DB, prefix: string, width: number): string {
   return String(max + 1).padStart(width, "0");
 }
 
+/** Номер ГиКС по паттерну сословия из реестра (Табель Kogoręx). */
 export function genGiks(db: DB, role: Role, pref: string): string {
-  let base = "";
-  switch (role) {
-    case "root":
-    case "operator":
-      base = `12-${nextSeq(db, "12-", 3)}`;
-      break;
-    case "tech":
-      base = `24-12-${nextSeq(db, "24-12-", 3)}`;
-      break;
-    case "moderator":
-      base = `24-01-${nextSeq(db, "24-01-", 3)}`;
-      break;
-    case "legal":
-      base = `23-00-${nextSeq(db, "23-00-", 5)}`;
-      break;
-    default:
-      base = `17-${pref}-${nextSeq(db, `17-${pref}-`, 5)}`;
-  }
+  const r = db.roles.find((x) => x.id === role) ?? db.roles.find((x) => x.id === "citizen");
+  const prefix = r?.prefix ?? "17";
+  const seq = r?.seq ?? 5;
+  const base = r?.usePref
+    ? `${prefix}-${pref}-${nextSeq(db, `${prefix}-${pref}-`, seq)}`
+    : `${prefix}-${nextSeq(db, `${prefix}-`, seq)}`;
   return `${base}-${giksCheck(base)}`;
+}
+
+/** Перевыпуск номера ГиКС подданного по действующему паттерну его сословия. */
+function reissueGiks(db: DB, u: User) {
+  u.giks = genGiks(db, u.role, u.pref);
+}
+/** Перевыпуск номеров у всех держателей сословия (при смене паттерна). */
+function reissueGiksAll(db: DB, roleId: Role) {
+  db.users.filter((u) => u.role === roleId).forEach((u) => reissueGiks(db, u));
 }
 
 export function authUser(itirinio: string, password: string): { ok: true; user: User } | { ok: false; err: "notfound" | "blocked" | "badpass" } {
@@ -466,8 +495,10 @@ export interface NewUser {
 export function createUser(d: NewUser): { err?: string; user?: User } {
   if (!d.name.trim()) return { err: "Укажите имя" };
   if (d.password.length < 6) return { err: "Пароль — не менее 6 знаков" };
-  const pref = d.role === "citizen" ? d.pref ?? "00" : "00";
   const db = getDB();
+  const rd = db.roles.find((r) => r.id === d.role);
+  if (!rd) return { err: "Сословие не числится в реестре" };
+  const pref = rd.usePref ? d.pref ?? "00" : "00";
   const user: User = {
     login: d.name.trim().toLowerCase().replace(/[^a-zа-яё0-9]+/gi, "-").slice(0, 18) + "-" + uid().slice(0, 4),
     itirinio: genItirinio(db),
@@ -522,10 +553,7 @@ export function formatItirinio(raw: string): string {
   return d.length > 12 ? `${d.slice(0, 12)}-${d.slice(12)}` : d;
 }
 
-/** Строгая проверка формата паспорта. */
-export function validItirinio(s: string): boolean {
-  return /^\d{12}-\d{12}$/.test(s);
-}
+
 
 export interface UserPatch {
   name?: string;
@@ -545,16 +573,18 @@ export function updateUser(login: string, patch: UserPatch): string | null {
   let it = u.itirinio;
   if (patch.itirinio !== undefined) {
     it = formatItirinio(patch.itirinio);
-    if (!validItirinio(it)) return "IŦirinio: ровно 24 цифры (12-12)";
+    if (!itirinioValid(it)) return "IŦirinio: ровно 24 цифры (12-12)";
     if (db.users.some((x) => x.login !== login && x.itirinio === it))
       return "Такой IŦirinio уже числится в реестре";
   }
 
   const role = patch.role ?? u.role;
   if (u.role === "root" && role !== "root") return "Сословие Императорского Дома изменению не подлежит";
-  const pref = role === "citizen" ? (patch.pref ?? u.pref) : "00";
+  const rd = db.roles.find((r) => r.id === role);
+  if (!rd) return "Сословие не числится в реестре";
+  const pref = rd.usePref ? patch.pref ?? u.pref : "00";
 
-  const statusChanged = role !== u.role || (role === "citizen" && pref !== u.pref);
+  const statusChanged = role !== u.role || (rd.usePref && pref !== u.pref);
 
   mutate((d) => {
     const t = d.users.find((x) => x.login === login);
@@ -578,6 +608,162 @@ export function setPasswordManual(login: string, password: string): string | nul
     if (u) u.password = password;
   });
   addLog(`Вручную установлен пароль: ${login}`);
+  return null;
+}
+
+/* ---------- реестр сословий (ролей) ---------- */
+
+export interface RolePatch {
+  label?: string;
+  prefix?: string;
+  seq?: 3 | 5;
+  usePref?: boolean;
+  admin?: boolean;
+  legal?: boolean;
+}
+
+const PREFIX_RE = /^\d{1,2}(-\d{1,2})?$/;
+
+export function createRole(p: RolePatch): string | null {
+  const label = (p.label ?? "").trim();
+  const prefix = (p.prefix ?? "").trim();
+  if (label.length < 2) return "Укажите наименование сословия";
+  if (!PREFIX_RE.test(prefix)) return "Паттерн ГиКС: 1–2 цифры, напр. 24-05 или 31";
+  if (!p.seq) return "Укажите разрядность";
+  const db = getDB();
+  if (db.roles.some((r) => r.label.toLowerCase() === label.toLowerCase()))
+    return "Сословие с таким наименованием уже числится";
+  const id =
+    label
+      .toLowerCase()
+      .replace(/[^a-zа-яё0-9]+/gi, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 20) || `role-${uid().slice(0, 4)}`;
+  const finalId = db.roles.some((r) => r.id === id) ? `${id}-${uid().slice(0, 3)}` : id;
+  mutate((d) => {
+    d.roles.push({
+      id: finalId,
+      label,
+      prefix,
+      seq: p.seq!,
+      usePref: !!p.usePref,
+      admin: !!p.admin,
+      legal: !!p.legal,
+    });
+  });
+  addLog(`Учреждено сословие «${label}» (ГиКС ${prefix}-…)`);
+  return null;
+}
+
+export function updateRole(id: Role, patch: RolePatch): string | null {
+  const db = getDB();
+  const r = db.roles.find((x) => x.id === id);
+  if (!r) return "Сословие не найдено в реестре";
+  if (patch.label !== undefined) {
+    const label = patch.label.trim();
+    if (label.length < 2) return "Наименование не может быть пустым";
+    if (db.roles.some((x) => x.id !== id && x.label.toLowerCase() === label.toLowerCase()))
+      return "Сословие с таким наименованием уже числится";
+  }
+  if (patch.prefix !== undefined && !PREFIX_RE.test(patch.prefix.trim()))
+    return "Паттерн ГиКС: 1–2 цифры, напр. 24-05 или 31";
+  if (id === "root" && patch.admin === false) return "Верховный Администратор не может быть лишён мандата";
+
+  const patternChanged =
+    (patch.prefix !== undefined && patch.prefix.trim() !== r.prefix) ||
+    (patch.seq !== undefined && patch.seq !== r.seq) ||
+    (patch.usePref !== undefined && patch.usePref !== r.usePref);
+
+  mutate((d) => {
+    const t = d.roles.find((x) => x.id === id);
+    if (!t) return;
+    if (patch.label !== undefined) t.label = patch.label.trim();
+    if (patch.prefix !== undefined) t.prefix = patch.prefix.trim();
+    if (patch.seq !== undefined) t.seq = patch.seq;
+    if (patch.usePref !== undefined) t.usePref = patch.usePref;
+    if (patch.admin !== undefined) t.admin = patch.admin;
+    if (patch.legal !== undefined) t.legal = patch.legal;
+    if (patternChanged) reissueGiksAll(d, id);
+  });
+
+  addLog(
+    `Сословие «${r.label}» изменено${patternChanged ? ` — номера ГиКС держателей перевыпущены по новому паттерну` : ""}`
+  );
+  return null;
+}
+
+export function deleteRole(id: Role): string | null {
+  const db = getDB();
+  const r = db.roles.find((x) => x.id === id);
+  if (!r) return "Сословие не найдено";
+  if (r.builtin) return "Учредительное сословие упразднению не подлежит";
+  const holders = db.users.filter((u) => u.role === id).length;
+  if (holders > 0) return `Сословие числится за ${holders} подд. — сначала переведите их в другое`;
+  mutate((d) => {
+    d.roles = d.roles.filter((x) => x.id !== id);
+  });
+  addLog(`Сословие «${r.label}» упразднено`);
+  return null;
+}
+
+/* ---------- реестр префектур ---------- */
+
+export function createPref(code: string, name: string): string | null {
+  const c = code.trim();
+  if (!/^\d{2}$/.test(c)) return "Код префектуры: ровно 2 цифры";
+  if (!name.trim()) return "Укажите наименование";
+  if (getDB().prefs.some((p) => p.code === c)) return `Код ${c} уже закреплён`;
+  mutate((db) => {
+    db.prefs.push({ code: c, name: name.trim() });
+  });
+  addLog(`Учреждена префектура ${c} — ${name.trim()}`);
+  return null;
+}
+
+export function updatePref(oldCode: string, patch: { code?: string; name?: string }): string | null {
+  const db = getDB();
+  const p = db.prefs.find((x) => x.code === oldCode);
+  if (!p) return "Префектура не найдена в реестре";
+  if (patch.name !== undefined && !patch.name.trim()) return "Наименование не может быть пустым";
+  let code = oldCode;
+  if (patch.code !== undefined) {
+    code = patch.code.trim();
+    if (!/^\d{2}$/.test(code)) return "Код префектуры: ровно 2 цифры";
+    if (db.prefs.some((x) => x.code === code && x.code !== oldCode)) return `Код ${code} уже закреплён`;
+  }
+  const codeChanged = code !== oldCode;
+  mutate((d) => {
+    const t = d.prefs.find((x) => x.code === oldCode);
+    if (!t) return;
+    t.code = code;
+    if (patch.name !== undefined) t.name = patch.name.trim();
+    if (codeChanged) {
+      for (const u of d.users) {
+        if (u.pref === oldCode) {
+          u.pref = code;
+          const rd = d.roles.find((r) => r.id === u.role);
+          if (rd?.usePref) reissueGiks(d, u);
+        }
+      }
+    }
+  });
+  addLog(
+    `Префектура ${oldCode} изменена${codeChanged ? `: новый код ${code}, номера ГиКС жителей перевыпущены` : ""}`
+  );
+  return null;
+}
+
+export function deletePref(code: string): string | null {
+  const db = getDB();
+  const p = db.prefs.find((x) => x.code === code);
+  if (!p) return "Префектура не найдена";
+  if (p.builtin) return "Учредительная префектура упразднению не подлежит";
+  const residents = db.users.filter((u) => u.pref === code).length;
+  if (residents > 0) return `В префектуре числится ${residents} подд. — сначала переселите их`;
+  mutate((d) => {
+    d.prefs = d.prefs.filter((x) => x.code !== code);
+  });
+  addLog(`Префектура ${code} упразднена`);
   return null;
 }
 

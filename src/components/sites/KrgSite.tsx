@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useDB, domainFull, KIND_LABEL, KIND_LETTER, type Domain, type User } from "../../lib/db";
+import { useDB, domainFull, isAdmin, KIND_LABEL, KIND_LETTER, type Domain, type User } from "../../lib/db";
 import { Emblem, IcArrowR, IcSearch, SiteMark } from "../../lib/icons";
 
 export default function KrgSite({ user, nav, mirror }: { user: User; nav: (h: string) => void; mirror?: boolean }) {
@@ -11,7 +11,7 @@ export default function KrgSite({ user, nav, mirror }: { user: User; nav: (h: st
     if (!s) return null;
     return db.domains.filter(
       (d) =>
-        (d.kind !== "admin" || user.role === "root" || user.role === "operator") &&
+        (d.kind !== "admin" || isAdmin(user)) &&
         (domainFull(d).includes(s) || d.desc.toLowerCase().includes(s))
     );
   }, [q, db.domains, user.role]);
@@ -22,7 +22,7 @@ export default function KrgSite({ user, nav, mirror }: { user: User; nav: (h: st
     else if (q.trim()) nav(q.trim());
   };
 
-  const visible = db.domains.filter((d) => d.kind !== "admin" || user.role === "root" || user.role === "operator");
+  const visible = db.domains.filter((d) => d.kind !== "admin" || isAdmin(user));
 
   return (
     <div className="mx-auto max-w-5xl px-5 py-10">

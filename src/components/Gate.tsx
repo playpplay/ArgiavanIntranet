@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { authUser, LEGAL_SHORT, ROLE_LABEL, toast, itirinioValid, type User } from "../lib/db";
+import { authUser, LEGAL_SHORT, roleLabel, toast, itirinioValid, type User } from "../lib/db";
 import { Emblem, IcChevD, IcEye, IcEyeOff, IcLock, IcShield } from "../lib/icons";
 
 const DEMO: Array<{ it: string; pass: string; role: string }> = [
@@ -212,7 +212,7 @@ export default function Gate({ onLogin }: { onLogin: (u: User) => void }) {
                     Аутентификация пройдена. Добро пожаловать в систему,{" "}
                     <span className="font-bold text-[var(--gold2)]">{grantedTo.name}</span>.
                     <br />
-                    Ваш текущий статус: <span className="font-semibold">{ROLE_LABEL[grantedTo.role]}</span>. IŦirinio
+                    Ваш текущий статус: <span className="font-semibold">{roleLabel(grantedTo.role)}</span>. IŦirinio
                     подтверждён.
                   </p>
                 </div>

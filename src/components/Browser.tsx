@@ -7,7 +7,8 @@ import {
   onToast,
   LEGAL_SHORT,
   LEGAL_FULL,
-  ROLE_LABEL,
+  roleLabel,
+  isAdmin,
   userName,
   type Domain,
   type User,
@@ -28,7 +29,7 @@ const TABS = [
 ];
 
 function siteAccess(d: Domain, u: User): boolean {
-  if (d.kind === "admin") return u.role === "root" || u.role === "operator";
+  if (d.kind === "admin") return isAdmin(u);
   return true;
 }
 
@@ -189,7 +190,7 @@ export default function Browser({ user, onLogout }: { user: User; onLogout: () =
                 {user.name}
               </div>
               <div className="text-[9px] text-[var(--dim)]">
-                {ROLE_LABEL[user.role]} • ГиКС {user.giks}
+                {roleLabel(user.role)} • ГиКС {user.giks}
               </div>
             </div>
           </div>
@@ -332,7 +333,7 @@ function Denied({ host, user }: { host: string; user: User }) {
         УЗЕЛ {host.toUpperCase()} — <span className="text-[var(--red3)]">ЗАКРЫТЫЙ КОНТУР</span>
       </h1>
       <p className="mt-3 max-w-lg text-[13px] leading-relaxed text-[var(--txt2)]">
-        Ваш мандат доступа ({ROLE_LABEL[user.role]}) не предоставляет полномочий для входа на данный узел.
+        Ваш мандат доступа ({roleLabel(user.role)}) не предоставляет полномочий для входа на данный узел.
         Попытка обращения зарегистрирована в журнале аудита и передана в Kostosęrio dę Arcanum для анализа в
         соответствии со Ст. 1 (187) КГТ.
       </p>
