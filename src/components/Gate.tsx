@@ -3,7 +3,7 @@ import { authUser, LEGAL_SHORT, ROLE_LABEL, toast, itirinioValid, type User } fr
 import { Emblem, IcChevD, IcEye, IcEyeOff, IcLock, IcShield } from "../lib/icons";
 
 const DEMO: Array<{ it: string; pass: string; role: string }> = [
-  { it: "000000000001-000000000001", pass: "arg-root", role: "Верховный Администратор (Император)" },
+  { it: "000000000000-000000000001", pass: "arg-root", role: "Верховный Администратор (Император)" },
   { it: "401277915320-883002174415", pass: "arg-tech", role: "Технический специалист ГНИЦСТ" },
   { it: "512208347761-902114530087", pass: "arg-mod", role: "Модератор (Стража)" },
   { it: "603915228407-114709263358", pass: "arg-oper", role: "Оператор Коллегии" },
@@ -102,7 +102,7 @@ export default function Gate({ onLogin }: { onLogin: (u: User) => void }) {
             </button>
             {legal && (
               <ol className="siteIn mono mt-3 max-w-md space-y-2 border-l border-[rgba(212,175,55,.4)] pl-4 text-[10.5px] leading-relaxed text-[var(--txt2)]">
-                <li>1. Сеть является собственностью Аргской Империи (Ст. 123 ROTTO).</li>
+                <li>1. Сеть является собственностью Империи Аргия (Ст. 123 ROTTO).</li>
                 <li>2. Трафик, почта и вызовы ГиКС анализируются алгоритмами ГНИЦСТ (Ст. 1 (187) КГТ).</li>
                 <li>3. Тайна переписки может быть ограничена трибуналом (Ст. 13.1 (22) Toqorro).</li>
                 <li>4. Несанкционированный доступ преследуется по Ст. 14 (79) и Ст. 10 (74) Закона Toqorro.</li>
@@ -254,7 +254,7 @@ export default function Gate({ onLogin }: { onLogin: (u: User) => void }) {
       <div className="goldline" />
       <footer className="mono flex items-center justify-between px-4 py-2.5 text-[9.5px] tracking-[0.16em] text-[var(--dim)]">
         <span>{LEGAL_SHORT}</span>
-        <span className="hidden md:block">АРГСКАЯ ИМПЕРИЯ • ГНИЦСТ • ВЕРСИЯ УЗЛА 2.0</span>
+        <span className="hidden md:block">ИМПЕРИЯ АРГИЯ • ГНИЦСТ • ВЕРСИЯ УЗЛА 2.0</span>
       </footer>
     </div>
   );

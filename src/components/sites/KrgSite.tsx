@@ -92,7 +92,7 @@ export default function KrgSite({ user, nav, mirror }: { user: User; nav: (h: st
       </div>
 
       <div className="mono mt-10 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--line)] pt-4 text-[10px] tracking-[0.2em] text-[var(--dim)]">
-        <span>ЕГИКС ARG-NET • СОБСТВЕННОСТЬ АРГСКОЙ ИМПЕРИИ</span>
+        <span>ЕГИКС ARG-NET • СОБСТВЕННОСТЬ ИМПЕРИИ АРГИЯ</span>
         <span>СЕАНС: {user.login.toUpperCase()}</span>
       </div>
     </div>

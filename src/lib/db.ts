@@ -120,20 +120,20 @@ export const PREFS: Array<{ code: string; name: string }> = [
 ];
 
 export const LEGAL_SHORT =
-  "Собственность Аргской Империи • Ст. 123 ROTTO • КГТ Ст. 1 (187): трафик анализируется ГНИЦСТ";
+  "Собственность Империи Аргия • Ст. 123 ROTTO • КГТ Ст. 1 (187): трафик анализируется ГНИЦСТ";
 
 export const LEGAL_FULL = [
-  "Настоящая информационная сеть является собственностью Аргской Империи.",
-  "В соответствии со Статьёй 123 ROTTO любое лицо, находящееся в цифровом или физическом периметре АИ, обязано соблюдать законы Империи.",
+  "Настоящая информационная сеть является собственностью Империи Аргия.",
+  "В соответствии со Статьёй 123 ROTTO любое лицо, находящееся в цифровом или физическом периметре ИА, обязано соблюдать законы Империи.",
   "В соответствии со Статьёй 1 (187) КГТ все действия, транзакции e-T, почтовые отправления и журналы вызовов ГИКС автоматически анализируются алгоритмами ГНИЦСТ на предмет соответствия Закону Toqorro.",
   "Право на неприкосновенность переписки (Ст. 13.1 (22) Toqorro) может быть ограничено по решению Военного или Государственного трибунала в интересах безопасности Империи.",
-  "Использование сети для распространения КГТ, критики монархического строя или организации несанкционированных собраний влечёт уголовную ответственность по Ст. 2 (66) и Ст. 3 (67) УК АИ.",
+  "Использование сети для распространения КГТ, критики монархического строя или организации несанкционированных собраний влечёт уголовную ответственность по Ст. 2 (66) и Ст. 3 (67) УК ИА.",
 ];
 
 /* ---------- сид ---------- */
 
-const KEY = "argnet-db-v2";
-const SKEY = "argnet-session-v2";
+const KEY = "argnet-db-v3";
+const SKEY = "argnet-session-v3";
 const H = 3_600_000;
 const D = 24 * H;
 const NOW = Date.now();
@@ -144,7 +144,7 @@ function seed(): DB {
     users: [
       {
         login: "krol",
-        itirinio: "000000000001-000000000001",
+        itirinio: "000000000000-000000000001",
         name: "Аргольд IV, Император Аргии",
         password: "arg-root",
         role: "root",
@@ -217,7 +217,7 @@ function seed(): DB {
       { name: "login", tld: "arg", kind: "service", owner: "krol", desc: "Единый портал аутентификации (SSO) по IŦirinio.", port: 8000, hosted: true, system: true, createdAt: NOW - 770 * D },
       { name: "sb", tld: "arg", kind: "bank", owner: "statusbanko", desc: "StatusBanko — Государственный Банк: счета e-T и расчёты.", port: 8001, hosted: true, system: true, createdAt: NOW - 700 * D },
       { name: "gnicst", tld: "anct", kind: "reserved", owner: "arcanum", desc: "ГНИЦСТ (Kostosęrio dę Arcanum). Адрес выделен; служба размещается владельцем.", port: 8002, hosted: false, system: true, createdAt: NOW - 760 * D },
-      { name: "post", tld: "arg", kind: "mail", owner: "krol", desc: "КЭП — единая почта Аргской Империи для граждан и ЮЛ.", port: 8003, hosted: true, system: true, createdAt: NOW - 750 * D },
+      { name: "post", tld: "arg", kind: "mail", owner: "krol", desc: "КЭП — единая почта Империи Аргия для граждан и ЮЛ.", port: 8003, hosted: true, system: true, createdAt: NOW - 750 * D },
       { name: "call", tld: "arg", kind: "voip", owner: "krol", desc: "ГИКС — государственная внутренняя телефония (WebRTC).", port: 8004, hosted: true, system: true, createdAt: NOW - 750 * D },
       { name: "kance", tld: "arg", kind: "admin", owner: "krol", desc: "Канцелярия Дворца Palacium Ręgnum: выдача паспортов, номеров, доменов и зон.", port: 8005, hosted: true, system: true, createdAt: NOW - 750 * D },
       { name: "kustos", tld: "arg", kind: "reserved", owner: "moder", desc: "Стража (Kustos). Адрес выделен; служба размещается владельцем.", port: 8006, hosted: false, system: true, createdAt: NOW - 740 * D },
@@ -512,6 +512,73 @@ export function resetPassword(login: string): string {
   });
   addLog(`Перевыпущен пароль: ${login}`);
   return pass;
+}
+
+/* ---------- ручное редактирование досье ---------- */
+
+/** Приводит ввод к виду 000000000000-000000000000 (24 цифры). */
+export function formatItirinio(raw: string): string {
+  const d = raw.replace(/\D/g, "").slice(0, 24);
+  return d.length > 12 ? `${d.slice(0, 12)}-${d.slice(12)}` : d;
+}
+
+/** Строгая проверка формата паспорта. */
+export function validItirinio(s: string): boolean {
+  return /^\d{12}-\d{12}$/.test(s);
+}
+
+export interface UserPatch {
+  name?: string;
+  itirinio?: string;
+  role?: Role;
+  pref?: string;
+}
+
+/** Правка досье подданного: имя, паспорт, сословие, префектура. ГиКС перевыпускается при смене сословия/префектуры. */
+export function updateUser(login: string, patch: UserPatch): string | null {
+  const db = getDB();
+  const u = db.users.find((x) => x.login === login);
+  if (!u) return "Подданный не найден в реестре";
+
+  if (patch.name !== undefined && !patch.name.trim()) return "Имя не может быть пустым";
+
+  let it = u.itirinio;
+  if (patch.itirinio !== undefined) {
+    it = formatItirinio(patch.itirinio);
+    if (!validItirinio(it)) return "IŦirinio: ровно 24 цифры (12-12)";
+    if (db.users.some((x) => x.login !== login && x.itirinio === it))
+      return "Такой IŦirinio уже числится в реестре";
+  }
+
+  const role = patch.role ?? u.role;
+  if (u.role === "root" && role !== "root") return "Сословие Императорского Дома изменению не подлежит";
+  const pref = role === "citizen" ? (patch.pref ?? u.pref) : "00";
+
+  const statusChanged = role !== u.role || (role === "citizen" && pref !== u.pref);
+
+  mutate((d) => {
+    const t = d.users.find((x) => x.login === login);
+    if (!t) return;
+    if (patch.name !== undefined) t.name = patch.name.trim();
+    t.itirinio = it;
+    t.role = role;
+    t.pref = pref;
+    if (statusChanged) t.giks = genGiks(d, role, pref);
+  });
+
+  addLog(`Досье изменено: ${login}${statusChanged ? " (перевыпущен ГиКС)" : ""}`);
+  return null;
+}
+
+/** Ручная установка пароля подданному. */
+export function setPasswordManual(login: string, password: string): string | null {
+  if (password.length < 6) return "Пароль — не менее 6 знаков";
+  mutate((db) => {
+    const u = db.users.find((x) => x.login === login);
+    if (u) u.password = password;
+  });
+  addLog(`Вручную установлен пароль: ${login}`);
+  return null;
 }
 
 /* ---------- доменные зоны ---------- */

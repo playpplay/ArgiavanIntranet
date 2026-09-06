@@ -12,6 +12,9 @@ import {
   domainFull,
   fmtDT,
   fmtDate,
+  formatItirinio,
+  updateUser,
+  setPasswordManual,
   PREFS,
   ROLE_LABEL,
   toast,
@@ -19,7 +22,7 @@ import {
   type User,
 } from "../../lib/db";
 import { API_BASE, API_ENDPOINTS } from "../../lib/api";
-import { IcBan, IcCheck, IcDoc, IcGlobe, IcKey, IcPlus, IcTrash, IcUsers, IcX } from "../../lib/icons";
+import { IcBan, IcCheck, IcDoc, IcEye, IcEyeOff, IcGlobe, IcKey, IcPlus, IcTrash, IcUsers, IcX } from "../../lib/icons";
 
 const TABS = [
   { id: "users", label: "Паспорта и учётные" },
@@ -133,6 +136,7 @@ function UsersTab({ onIssued, onNewPass }: { onIssued: (u: User) => void; onNewP
   const [role, setRole] = useState<Role>("citizen");
   const [pref, setPref] = useState("00");
   const [password, setPassword] = useState("");
+  const [editing, setEditing] = useState<User | null>(null);
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -217,6 +221,9 @@ function UsersTab({ onIssued, onNewPass }: { onIssued: (u: User) => void; onNewP
                 </td>
                 <td>
                   <div className="flex justify-end gap-1">
+                    <IconBtn title="Изменить досье (имя, IŦirinio, пароль)" onClick={() => setEditing(u)}>
+                      <IcDoc size={14} />
+                    </IconBtn>
                     <IconBtn title="Перевыпустить пароль" onClick={() => onNewPass(resetPassword(u.login))}>
                       <IcKey size={14} />
                     </IconBtn>
@@ -253,6 +260,127 @@ function UsersTab({ onIssued, onNewPass }: { onIssued: (u: User) => void; onNewP
           </tbody>
         </table>
       </div>
+
+      {editing && <EditUserModal user={editing} onClose={() => setEditing(null)} />}
+    </div>
+  );
+}
+
+/* ---------- правка досье ---------- */
+
+function EditUserModal({ user, onClose }: { user: User; onClose: () => void }) {
+  const [name, setName] = useState(user.name);
+  const [it, setIt] = useState(user.itirinio);
+  const [role, setRole] = useState<Role>(user.role);
+  const [pref, setPref] = useState(user.pref);
+  const [password, setPassword] = useState("");
+  const [showPass, setShowPass] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const isRoot = user.role === "root";
+
+  const save = (e: React.FormEvent) => {
+    e.preventDefault();
+    setErr(null);
+    const uErr = updateUser(user.login, { name, itirinio: it, role, pref });
+    if (uErr) return setErr(uErr);
+    if (password.trim()) {
+      const pErr = setPasswordManual(user.login, password.trim());
+      if (pErr) return setErr(pErr);
+    }
+    toast("Досье обновлено и внесено в журнал аудита");
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={onClose}>
+      <form onSubmit={save} className="panel w-full max-w-md border-[rgba(212,175,55,.5)] p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between">
+          <div>
+            <h3 className="display text-lg font-bold text-[var(--gold2)]">ПРАВКА ДОСЬЕ</h3>
+            <p className="mono mt-0.5 text-[10px] tracking-[0.2em] text-[var(--dim)]">ЛОГИН: {user.login}</p>
+          </div>
+          <button type="button" onClick={onClose} className="text-[var(--dim)] hover:text-[var(--red3)]">
+            <IcX size={18} />
+          </button>
+        </div>
+        <div className="goldline my-4" />
+
+        <label className="mono text-[10px] tracking-[0.2em] text-[var(--dim)]">ИМЯ</label>
+        <input value={name} onChange={(e) => setName(e.target.value)} className="field mt-1" />
+
+        <label className="mono mt-3 block text-[10px] tracking-[0.2em] text-[var(--dim)]">IŦIRINIO (НОМЕР ПАСПОРТА)</label>
+        <input
+          value={it}
+          onChange={(e) => setIt(formatItirinio(e.target.value))}
+          className="field mono mt-1"
+          placeholder="000000000000-000000000000"
+        />
+
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <div>
+            <label className="mono text-[10px] tracking-[0.2em] text-[var(--dim)]">СОСЛОВИЕ</label>
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value as Role)}
+              className="field mt-1"
+              disabled={isRoot}
+              title={isRoot ? "Сословие Императорского Дома неизменно" : undefined}
+            >
+              <option value="citizen">Ťivitano (17-…)</option>
+              <option value="legal">Юридическое лицо (23-…)</option>
+              <option value="operator">Оператор Коллегии (12-…)</option>
+              <option value="tech">Тех. специалист (24-12-…)</option>
+              <option value="moderator">Модератор (24-01-…)</option>
+              {isRoot && <option value="root">Император (12-001)</option>}
+            </select>
+          </div>
+          {role === "citizen" && (
+            <div>
+              <label className="mono text-[10px] tracking-[0.2em] text-[var(--dim)]">ПРЕФЕКТУРА</label>
+              <select value={pref} onChange={(e) => setPref(e.target.value)} className="field mt-1">
+                {PREFS.map((p) => (
+                  <option key={p.code} value={p.code}>
+                    {p.code} — {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+
+        <label className="mono mt-3 block text-[10px] tracking-[0.2em] text-[var(--dim)]">
+          НОВЫЙ ПАРОЛЬ (НЕОБЯЗАТЕЛЬНО)
+        </label>
+        <div className="relative mt-1">
+          <input
+            type={showPass ? "text" : "password"}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="field mono pr-10"
+            placeholder="оставьте пустым — без изменений"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPass((s) => !s)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--dim)] hover:text-[var(--gold2)]"
+            title={showPass ? "Скрыть" : "Показать"}
+          >
+            {showPass ? <IcEyeOff size={14} /> : <IcEye size={14} />}
+          </button>
+        </div>
+
+        {err && <p className="mono mt-3 border border-[var(--red2)] bg-[rgba(139,0,0,.15)] px-3 py-2 text-[11.5px] text-[var(--red3)]">{err}</p>}
+
+        <p className="mono mt-3 text-[9.5px] leading-4 text-[var(--dim)]">
+          ПРИ СМЕНЕ СОСЛОВИЯ ИЛИ ПРЕФЕКТУРЫ НОМЕР ГИКС ПЕРЕВЫПУСКАЕТСЯ АВТОМАТИЧЕСКИ. ТЕКУЩИЙ: {user.giks}
+        </p>
+
+        <div className="mt-4 flex gap-2">
+          <button type="button" onClick={onClose} className="btn flex-1">Отмена</button>
+          <button type="submit" className="btn btn-gold flex-1">Сохранить</button>
+        </div>
+      </form>
     </div>
   );
 }
