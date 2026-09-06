@@ -203,7 +203,10 @@ function load(): BankDB {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const p = JSON.parse(raw) as BankDB;
-      if (p && Array.isArray(p.accounts)) return p;
+      if (p && Array.isArray(p.accounts)) {
+        if (!p.prefs) p.prefs = {};
+        return p;
+      }
     }
   } catch {
     /* повреждено — пересоздаём */
