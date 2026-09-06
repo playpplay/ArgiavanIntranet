@@ -2,12 +2,7 @@ import type { ReactNode } from "react";
 
 type P = { size?: number; className?: string; sw?: number };
 
-const S = ({
-  size = 18,
-  className,
-  sw = 1.7,
-  children,
-}: P & { children: ReactNode }) => (
+const S = ({ size = 18, className, sw = 1.7, children }: P & { children: ReactNode }) => (
   <svg
     width={size}
     height={size}
@@ -255,70 +250,103 @@ export const IcNode = (p: P) => (
     <path d="M7.3 10.8l9.4-3.6M7.3 13.2l9.4 3.6" />
   </S>
 );
+export const IcBank = (p: P) => (
+  <S {...p}>
+    <path d="M3 9l9-6 9 6" />
+    <path d="M4 9h16" />
+    <path d="M6 9v9M10 9v9M14 9v9M18 9v9" />
+    <path d="M3 18h18M2 21h20" />
+  </S>
+);
+export const IcScale = (p: P) => (
+  <S {...p}>
+    <path d="M12 3v18M8 21h8" />
+    <path d="M5 6h14" />
+    <path d="M5 6l-2.5 6a3 3 0 0 0 5 0L5 6zM19 6l-2.5 6a3 3 0 0 0 5 0L19 6z" />
+  </S>
+);
+export const IcRadar = (p: P) => (
+  <S {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <circle cx="12" cy="12" r="4.5" />
+    <path d="M12 12L18 5" />
+    <circle cx="15" cy="15" r="0.5" fill="currentColor" />
+  </S>
+);
+export const IcStamp = (p: P) => (
+  <S {...p}>
+    <path d="M9 3h6l-1 7h3a3 3 0 0 1 3 3v3H4v-3a3 3 0 0 1 3-3h3z" />
+    <path d="M4 20h16" />
+  </S>
+);
 
-/* ---------- герб и марки сайтов ---------- */
+/* ---------- Малый государственный герб Аргского Королевства ---------- */
 
 export const Emblem = ({ size = 120, className }: { size?: number; className?: string }) => (
-  <svg viewBox="0 0 120 120" width={size} height={size} className={className} fill="none" aria-hidden="true">
-    <circle cx="60" cy="60" r="56" stroke="var(--brass)" strokeWidth="1.4" />
-    <circle
-      cx="60"
-      cy="60"
-      r="48"
-      stroke="var(--brass)"
-      strokeWidth="0.8"
-      opacity="0.5"
-      strokeDasharray="3 5"
+  <svg viewBox="0 0 120 132" width={size} height={(size * 132) / 120} className={className} fill="none" aria-hidden="true">
+    {/* скрещённые мечи */}
+    <g stroke="var(--gold)" strokeWidth="1.1" opacity="0.55">
+      <path d="M22 104 L88 30 M84 26 l8 8 M20 100 l8 8" />
+      <path d="M98 104 L32 30 M28 26 l8 8 M92 100 l8 8" />
+    </g>
+    {/* корона */}
+    <g stroke="var(--gold)" strokeWidth="1.4">
+      <path d="M44 24 L48 10 L56 19 L60 6 L64 19 L72 10 L76 24 Z" />
+      <rect x="44" y="24" width="32" height="5" />
+    </g>
+    <circle cx="60" cy="4.5" r="1.8" style={{ fill: "var(--red2)" }} />
+    {/* щит */}
+    <path
+      d="M60 34 L88 43 V78 C88 97 74 109 60 116 C46 109 32 97 32 78 V43 Z"
+      stroke="var(--gold)"
+      strokeWidth="1.8"
+      fill="rgba(139,0,0,0.14)"
     />
-    <path d="M60 22 L92 41 V79 L60 98 L28 79 V41 Z" stroke="var(--brass)" strokeWidth="1.6" />
-    <path d="M60 30 L85 45 V75 L60 90 L35 75 V45 Z" stroke="var(--verd)" strokeWidth="0.8" opacity="0.6" />
+    <path
+      d="M60 40 L82 47.5 V77 C82 92 71 102 60 108 C49 102 38 92 38 77 V47.5 Z"
+      stroke="var(--gold)"
+      strokeWidth="0.7"
+      opacity="0.6"
+    />
     <text
       x="60"
-      y="75"
+      y="86"
       textAnchor="middle"
-      fontFamily="'Russo One', sans-serif"
-      fontSize="42"
-      style={{ fill: "var(--brass2)" }}
+      fontFamily="'Playfair Display', Georgia, serif"
+      fontWeight="900"
+      fontSize="38"
+      style={{ fill: "var(--gold2)" }}
     >
       А
     </text>
-    <ellipse
-      cx="60"
-      cy="60"
-      rx="52"
-      ry="13"
-      stroke="var(--verd)"
-      strokeWidth="0.9"
-      opacity="0.65"
-      transform="rotate(-18 60 60)"
-    />
-    <circle cx="104" cy="43" r="2.6" style={{ fill: "var(--verd)" }} />
-    <circle cx="16" cy="77" r="2.6" style={{ fill: "var(--brass)" }} />
-    <circle cx="60" cy="6" r="1.8" style={{ fill: "var(--brass2)" }} />
+    {/* лента */}
+    <path d="M34 112 H86 L92 124 H28 Z" fill="var(--red)" stroke="var(--gold)" strokeWidth="0.9" />
+    <text
+      x="60"
+      y="121.5"
+      textAnchor="middle"
+      fontFamily="'IBM Plex Mono', monospace"
+      fontSize="7.5"
+      letterSpacing="3"
+      style={{ fill: "var(--gold2)" }}
+    >
+      АРГИЯ
+    </text>
   </svg>
 );
 
-export const SiteMark = ({
-  label,
-  hue,
-  size = 34,
-}: {
-  label: string;
-  hue: string;
-  size?: number;
-}) => (
+/* ---------- марки узлов ---------- */
+
+export const SiteMark = ({ label, hue, size = 34 }: { label: string; hue: string; size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 40 40" fill="none" aria-hidden="true">
-    <path
-      d="M20 3 L35 11.5 V28.5 L20 37 L5 28.5 V11.5 Z"
-      style={{ fill: hue }}
-      opacity="0.13"
-    />
+    <path d="M20 3 L35 11.5 V28.5 L20 37 L5 28.5 V11.5 Z" style={{ fill: hue }} opacity="0.12" />
     <path d="M20 3 L35 11.5 V28.5 L20 37 L5 28.5 V11.5 Z" style={{ stroke: hue }} strokeWidth="1.4" />
     <text
       x="20"
       y="25.5"
       textAnchor="middle"
-      fontFamily="'Russo One', sans-serif"
+      fontFamily="'Playfair Display', Georgia, serif"
+      fontWeight="800"
       fontSize={label.length > 1 ? 11 : 15}
       style={{ fill: hue }}
     >

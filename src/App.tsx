@@ -9,14 +9,13 @@ export default function App() {
   const handleLogin = (u: User) => {
     setSession(u.login);
     setUser(u);
-    toast(`Доступ разрешён. Слава Империи, ${u.name.split(" ").slice(-1)[0]}!`);
   };
 
   const handleLogout = () => {
-    if (user) addLog(`${user.login}: выход из сети`);
+    if (user) addLog(`${user.login}: выход из сети (разрыв сеанса)`);
     setSession(null);
     setUser(null);
-    toast("Соединение разорвано. Узел 01 ждёт вашего возвращения.", "info");
+    toast("Соединение разорвано. Сеанс закрыт, мандат отозван.", "info");
   };
 
   return (

@@ -1,241 +1,238 @@
-import { useEffect, useRef, useState } from "react";
-import { authUser, toast, type User } from "../lib/db";
-import { Emblem, IcBan, IcEye, IcEyeOff, IcPower, IcShield, IcSignal } from "../lib/icons";
+import { useEffect, useState } from "react";
+import { authUser, LEGAL_FULL, ROLE_LABEL, toast, type User } from "../lib/db";
+import { Emblem, IcChevD, IcEye, IcEyeOff, IcLock, IcShield } from "../lib/icons";
 
-const HANDSHAKE = [
-  "> рукопожатие с узлом 01-столица .............. ОК",
-  "> проверка подданства и пароля ................ ОК",
-  "> ключ сессии АРГ-256 принят",
-  "> ДОСТУП РАЗРЕШЁН",
+const STEPS = [
+  "ПРОВЕРКА IŦIRINIO…",
+  "СВЕРКА С ГОСУДАРСТВЕННЫМ РЕЕСТРОМ…",
+  "ЗАПРОС В ГНИЦСТ (КГТ СТ. 1 (187))…",
+  "ВЫДАЧА МАНДАТА ДОСТУПА…",
 ];
 
-const TICKER = [
-  "Указ №17 — о едином адресном пространстве .arg и .anct",
-  "Канцелярия напоминает: передача пароля третьим лицам карается отключением от сети",
-  "Узел 07 «Верхний Аргск» несёт дежурство в штатном режиме",
-  "Пошлина за имя в зоне .arg — три империала в год, в зоне .anct — один",
-  "Самовольное захватничество доменных имён пресекается по Уложению о тайне",
+const DEMO: Array<{ it: string; pass: string; role: string }> = [
+  { it: "A-000-001", pass: "arg-root", role: "Верховный Администратор (Корона)" },
+  { it: "A-000-010", pass: "arg-tech", role: "Технический специалист ГНИЦСТ" },
+  { it: "A-000-017", pass: "arg-mod", role: "Модератор Стражи" },
+  { it: "A-000-021", pass: "arg-op", role: "Оператор Коллегии" },
+  { it: "A-001-291", pass: "arg-1234", role: "Ťivitano (гражданин)" },
+  { it: "A-010-005", pass: "arg-1234", role: "Юридическое лицо" },
 ];
 
 export default function Gate({ onLogin }: { onLogin: (u: User) => void }) {
-  const [login, setLogin] = useState("");
+  const [it, setIt] = useState("");
   const [pass, setPass] = useState("");
   const [show, setShow] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [shakeKey, setShakeKey] = useState(0);
-  const [phase, setPhase] = useState<"idle" | "hand">("idle");
-  const [shown, setShown] = useState(0);
-  const pending = useRef<User | null>(null);
+  const [phase, setPhase] = useState<"form" | "auth" | "ok">("form");
+  const [step, setStep] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [shake, setShake] = useState(0);
+  const [legal, setLegal] = useState(false);
+  const [clock, setClock] = useState(() => new Date());
+  const [grantedTo, setGrantedTo] = useState<User | null>(null);
 
   useEffect(() => {
-    if (phase !== "hand") return;
-    const timers = HANDSHAKE.map((_, i) => setTimeout(() => setShown(i + 1), 300 * (i + 1)));
-    timers.push(
-      setTimeout(() => {
-        if (pending.current) onLogin(pending.current);
-      }, 300 * HANDSHAKE.length + 700)
-    );
-    return () => timers.forEach(clearTimeout);
-  }, [phase, onLogin]);
+    const iv = setInterval(() => setClock(new Date()), 1000);
+    return () => clearInterval(iv);
+  }, []);
 
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const u = authUser(login, pass);
-    if (!u) {
-      setErr("ОТКАЗАНО: неверная пара логин / пароль");
-      setShakeKey((k) => k + 1);
-      toast("Доступ запрещён. Пароль выдает администратор.", "err");
+  const submit = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (phase !== "form") return;
+    if (!it.trim() || !pass) {
+      setError("Поля IŦIRINIO и ПАРОЛЬ обязательны к заполнению.");
+      setShake((s) => s + 1);
       return;
     }
-    setErr(null);
-    pending.current = u;
-    setPhase("hand");
-  };
-
-  const fill = (l: string, p: string) => {
-    setLogin(l);
-    setPass(p);
-    setErr(null);
-    toast("Данные подставлены — жмите «Установить соединение»", "info");
+    setError(null);
+    setPhase("auth");
+    setStep(0);
+    STEPS.forEach((_, i) => setTimeout(() => setStep(i + 1), 450 * (i + 1)));
+    setTimeout(() => {
+      const r = authUser(it, pass);
+      if (r.ok) {
+        setGrantedTo(r.user);
+        setPhase("ok");
+        setTimeout(() => onLogin(r.user), 1500);
+      } else {
+        setPhase("form");
+        setShake((s) => s + 1);
+        if (r.reason === "badpass") {
+          setError("Пароль не принят. Попытка входа зарегистрирована в журнале аудита ЕГИКС.");
+        } else {
+          setError(
+            "Указанный идентификатор Iŧirinio не найден в Государственном реестре или заблокирован. Попытка входа зарегистрирована и передана в Kostosęrio dę Arcanum для анализа."
+          );
+        }
+      }
+    }, 450 * STEPS.length + 500);
   };
 
   return (
-    <div className="relative min-h-screen lg:grid lg:grid-cols-[1.15fr_1fr]">
-      {/* левая створка — манифест сети */}
-      <div className="relative hidden border-r border-[var(--line)] lg:flex lg:flex-col lg:justify-between lg:p-10 lg:pb-16">
-        <span className="vert mono absolute left-5 top-1/2 -translate-y-1/2 text-[10px] tracking-[0.35em] text-[var(--dim)]">
-          СЕТЕВОЙ УСТАВ • УКАЗ №7 • ДОПУСК ТОЛЬКО ДЛЯ ПОДДАННЫХ ИМПЕРИИ
-        </span>
-
-        <div className="flex items-center justify-between pl-10">
-          <span className="display text-sm tracking-[0.2em] text-[var(--txt)]">АРГСКАЯ ИМПЕРИЯ</span>
-          <span className="mono text-[10px] tracking-[0.2em] text-[var(--dim)]">
-            МИНИСТЕРСТВО СВЯЗИ И ЦИФРОВЫХ ДОМЕНОВ
-          </span>
-        </div>
-
-        <div className="pl-10">
-          <Emblem size={128} className="mb-8" />
-          <h1 className="display text-6xl leading-none tracking-wide text-[var(--txt)] xl:text-7xl">
-            АРГО<span className="text-[var(--brass)]">НЕТ</span>
-          </h1>
-          <p className="mono mt-4 text-[11px] tracking-[0.35em] text-[var(--txt2)]">
-            ВНУТРЕННЯЯ СЕТЬ ИМПЕРИИ
-          </p>
-          <p className="mt-6 max-w-md text-sm leading-relaxed text-[var(--txt2)]">
-            Суверенное адресное пространство в двух зонах — <b className="text-[var(--brass2)]">.arg</b> для
-            учреждений Империи и <b className="text-[var(--verd2)]">.anct</b> для служб и подданных.
-            Почта, голосовая связь и реестр доменов — под одной крышей и одним паролем.
-          </p>
-          <div className="mono mt-8 flex flex-wrap gap-x-6 gap-y-2 text-[11px] text-[var(--txt2)]">
-            <span className="flex items-center gap-2">
-              <span className="dot-live inline-block h-2 w-2 rounded-full bg-[var(--verd)]" />
-              КАНАЛ: СТАБИЛЕН
-            </span>
-            <span className="flex items-center gap-2">
-              <IcSignal size={14} className="text-[var(--brass)]" /> УЗЕЛ 01 — СТОЛИЦА
-            </span>
-            <span className="flex items-center gap-2">
-              <IcShield size={14} className="text-[var(--brass)]" /> ШИФР АРГ-256
-            </span>
-          </div>
-        </div>
-
-        <div className="mono pl-10 text-[10px] tracking-[0.25em] text-[var(--dim)]">
-          ОСНОВАНА В 412-Й ДЕНЬ ДО НЫНЕШНЕГО • ДВЕНАДЦАТЬ УЗЛОВ
-        </div>
+    <div className="relative flex min-h-full flex-col items-center justify-center px-4 py-10">
+      {/* верхняя служебная строка */}
+      <div className="mono pointer-events-none absolute left-4 top-3 text-[10px] tracking-[0.25em] text-[var(--dim)]">
+        ЕГИКС • УЗЕЛ 01 • ЛОКАЛЬНЫЙ КОНТУР
+      </div>
+      <div className="mono pointer-events-none absolute right-4 top-3 text-[10px] tracking-[0.25em] text-[var(--dim)]">
+        {clock.toLocaleDateString("ru-RU")} {clock.toLocaleTimeString("ru-RU")}
       </div>
 
-      {/* правая створка — терминал доступа */}
-      <div className="flex min-h-screen items-center justify-center p-6 lg:min-h-0 lg:p-14 lg:pb-20">
-        <div className="w-full max-w-md">
-          <div className="lg:hidden mb-8 flex items-center gap-4">
-            <Emblem size={64} />
-            <div>
-              <div className="display text-2xl tracking-wide">АРГОНЕТ</div>
-              <div className="mono text-[10px] tracking-[0.3em] text-[var(--txt2)]">ВНУТРЕННЯЯ СЕТЬ ИМПЕРИИ</div>
-            </div>
-          </div>
+      <div key={shake} className={`w-full max-w-xl ${shake ? "shake" : ""}`}>
+        {/* герб и заголовок */}
+        <div className="fadeUp flex flex-col items-center text-center">
+          <Emblem size={92} />
+          <div className="mt-3 chip chip-gold">ДЛЯ СЛУЖЕБНОГО ПОЛЬЗОВАНИЯ (DSP)</div>
+          <h1 className="display mt-4 text-2xl font-extrabold leading-snug tracking-wide sm:text-[27px]">
+            ГОСУДАРСТВЕННЫЙ СЕГМЕНТ СЕТИ <span className="text-[var(--gold)]">ARG-NET</span>
+          </h1>
+          <p className="mono mt-1 text-[10.5px] tracking-[0.3em] text-[var(--dim)]">LOGIN.ARG • ПОРТ 8000 • ЕДИНЫЙ ПОРТАЛ АУТЕНТИФИКАЦИИ</p>
+          <p className="mt-4 max-w-md text-[13px] leading-relaxed text-[var(--txt2)]">
+            Введите ваш действительный номер Iŧirinio и пароль для аутентификации.
+          </p>
+        </div>
 
-          <div key={shakeKey} className={`panel relative p-8 ${err ? "shake" : ""}`}>
-            <div className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-transparent via-[var(--brass)] to-transparent" />
-            <div className="mb-6 flex items-start justify-between">
-              <div>
-                <h2 className="display text-2xl tracking-wide">ВХОД В СЕТЬ</h2>
-                <p className="mt-1 text-[13px] text-[var(--txt2)]">
-                  Доступ жалует администратор — Имперская канцелярия.
-                </p>
+        {/* форма */}
+        <form onSubmit={submit} className="panel fadeUp mt-6 p-6" style={{ animationDelay: "120ms" }}>
+          {phase === "ok" && grantedTo ? (
+            <div className="siteIn flex flex-col items-center py-6 text-center">
+              <div className="flex h-16 w-16 items-center justify-center border border-[var(--gold)] bg-[rgba(212,175,55,.08)]">
+                <IcShield size={30} className="text-[var(--gold)]" />
               </div>
-              <IcShield size={26} className="text-[var(--brass)]" />
+              <p className="mt-4 text-sm leading-relaxed text-[var(--txt)]">
+                Аутентификация пройдена. Добро пожаловать в систему,{" "}
+                <span className="font-bold text-[var(--gold2)]">
+                  {grantedTo.role === "root" ? "Ваше Величество" : `гр. ${grantedTo.name}`}
+                </span>
+                .
+                <br />
+                Ваш текущий статус: <span className="font-semibold">{ROLE_LABEL[grantedTo.role]}</span>. Iŧirinio подтверждён.
+              </p>
+              <p className="mono mt-4 text-[10px] tracking-[0.25em] text-[var(--dim)] blink">ПЕРЕДАЧА МАНДАТА ДОСТУПА…</p>
             </div>
-
-            <form onSubmit={submit} className="space-y-4">
-              <div>
-                <label className="mono mb-1.5 block text-[10px] tracking-[0.25em] text-[var(--dim)]">
-                  ЛОГИН ПОДДАННОГО
-                </label>
-                <input
-                  className="field mono"
-                  value={login}
-                  onChange={(e) => setLogin(e.target.value)}
-                  placeholder="например, imperator"
-                  autoComplete="username"
-                  autoFocus
-                />
-              </div>
-              <div>
-                <label className="mono mb-1.5 block text-[10px] tracking-[0.25em] text-[var(--dim)]">ПАРОЛЬ</label>
-                <div className="relative">
-                  <input
-                    className="field mono pr-11"
-                    type={show ? "text" : "password"}
-                    value={pass}
-                    onChange={(e) => setPass(e.target.value)}
-                    placeholder="••••••••"
-                    autoComplete="current-password"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShow((s) => !s)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-[var(--dim)] transition-colors hover:text-[var(--brass2)]"
-                    aria-label="Показать пароль"
+          ) : phase === "auth" ? (
+            <div className="mono space-y-2.5 py-6 text-[12px] tracking-[0.15em]">
+              {STEPS.map((s, i) => (
+                <div key={s} className="flex items-center gap-3">
+                  <span
+                    className={
+                      i < step ? "text-[var(--gold)]" : i === step ? "blink text-[var(--txt)]" : "text-[var(--dim)] opacity-40"
+                    }
                   >
-                    {show ? <IcEyeOff size={17} /> : <IcEye size={17} />}
+                    {i < step ? "▣" : "▢"}
+                  </span>
+                  <span className={i < step ? "text-[var(--txt2)]" : i === step ? "text-[var(--txt)]" : "text-[var(--dim)] opacity-40"}>
+                    {s}
+                  </span>
+                  {i < step && <span className="ml-auto text-[10px] text-[var(--gold)]">ОК</span>}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-4 sm:grid-cols-[1fr_auto]">
+                <div className="space-y-4">
+                  <div>
+                    <label className="mono mb-1.5 block text-[10px] tracking-[0.22em] text-[var(--dim)]">IŦIRINIO</label>
+                    <input
+                      className="field mono text-[15px] tracking-widest"
+                      placeholder="A-000-000"
+                      value={it}
+                      onChange={(e) => setIt(e.target.value)}
+                      autoFocus
+                    />
+                  </div>
+                  <div>
+                    <label className="mono mb-1.5 block text-[10px] tracking-[0.22em] text-[var(--dim)]">ПАРОЛЬ</label>
+                    <div className="relative">
+                      <input
+                        className="field mono pr-11 text-[15px] tracking-widest"
+                        type={show ? "text" : "password"}
+                        placeholder="••••••••"
+                        value={pass}
+                        onChange={(e) => setPass(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShow((s) => !s)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--dim)] transition-colors hover:text-[var(--gold)]"
+                      >
+                        {show ? <IcEyeOff size={17} /> : <IcEye size={17} />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-end">
+                  <button type="submit" className="btn btn-gold w-full px-6 py-[1.05rem] sm:w-auto">
+                    <IcLock size={15} /> Войти в систему
                   </button>
                 </div>
               </div>
 
-              {err && (
-                <p className="mono flex items-center gap-2 border border-[rgba(198,90,69,.4)] bg-[rgba(198,90,69,.08)] px-3 py-2 text-[12px] text-[var(--signal2)]">
-                  <IcBan size={14} /> {err}
-                </p>
+              {error && (
+                <div className="siteIn mt-4 border border-[rgba(194,43,43,.55)] bg-[rgba(139,0,0,.14)] p-3.5">
+                  <p className="mono text-[10px] tracking-[0.25em] text-[var(--red3)]">ОШИБКА АВТОРИЗАЦИИ</p>
+                  <p className="mt-1.5 text-[12.5px] leading-relaxed text-[#e8c9c5]">{error}</p>
+                </div>
               )}
 
-              <button type="submit" className="btn btn-brass w-full py-3">
-                <IcPower size={16} /> Установить соединение
-              </button>
-            </form>
-
-            <div className="mt-6 border border-[var(--line)] bg-[rgba(10,17,14,.6)] p-3">
-              <p className="mono mb-2 text-[10px] tracking-[0.25em] text-[var(--dim)]">
-                ДЕМО-ДОСТУП ПРОТОТИПА — нажмите, чтобы подставить
+              <p className="mt-4 flex items-start gap-2 border-t border-[var(--line)] pt-3.5 text-[11.5px] leading-relaxed text-[var(--dim)]">
+                <span className="mt-0.5 shrink-0 text-[var(--red2)]">▲</span>
+                Предупреждение: несанкционированный доступ преследуется по ст. 14 (79) и ст. 10 (74) Закона Toqorro.
               </p>
-              <div className="space-y-1.5">
-                <button
-                  onClick={() => fill("imperator", "arg-0001")}
-                  className="mono flex w-full items-center justify-between px-2 py-1.5 text-left text-[12px] text-[var(--txt2)] transition-colors hover:bg-[rgba(201,163,92,.08)] hover:text-[var(--brass2)]"
-                >
-                  <span>imperator / arg-0001</span>
-                  <span className="chip chip-arg">администратор</span>
-                </button>
-                <button
-                  onClick={() => fill("ivanov", "arg-0002")}
-                  className="mono flex w-full items-center justify-between px-2 py-1.5 text-left text-[12px] text-[var(--txt2)] transition-colors hover:bg-[rgba(79,156,134,.08)] hover:text-[var(--verd2)]"
-                >
-                  <span>ivanov / arg-0002</span>
-                  <span className="chip chip-anct">подданный</span>
-                </button>
-              </div>
-            </div>
-          </div>
+            </>
+          )}
+        </form>
 
-          <p className="mono mt-4 text-center text-[10px] tracking-[0.15em] text-[var(--dim)]">
-            БОЕВОЙ УЗЕЛ — PYTHONANYWHERE • ФЛАСК + СКУЛАЙТ • ПАРОЛИ — БКРИПТ
-          </p>
-        </div>
-      </div>
-
-      {/* бегущая строка указов */}
-      <div className="absolute inset-x-0 bottom-0 overflow-hidden border-t border-[var(--line)] bg-[rgba(10,17,14,.85)] py-2">
-        <div className="marquee mono text-[11px] tracking-[0.12em] text-[var(--txt2)]">
-          {[0, 1].map((copy) => (
-            <div key={copy} className="flex shrink-0">
-              {TICKER.map((t, i) => (
-                <span key={i} className="flex items-center whitespace-nowrap pr-12">
-                  <span className="mr-3 text-[var(--brass)]">✦</span> {t}
-                </span>
-              ))}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* рукопожатие */}
-      {phase === "hand" && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(9,15,12,.97)]">
-          <div className="mono w-full max-w-lg px-6 text-[13px] leading-8 text-[var(--verd2)] sm:text-sm">
-            {HANDSHAKE.slice(0, shown).map((l, i) => (
-              <div key={i} className="fadeUp">
-                {l}
-                {i === shown - 1 && i === HANDSHAKE.length - 1 && pending.current && (
-                  <span className="text-[var(--brass2)]">: {pending.current.name}</span>
-                )}
-              </div>
+        {/* заявление */}
+        <button
+          onClick={() => setLegal((l) => !l)}
+          className="mono mt-4 flex w-full items-center gap-2 px-1 text-[10px] tracking-[0.22em] text-[var(--dim)] transition-colors hover:text-[var(--gold)]"
+        >
+          <IcChevD size={13} className={`transition-transform ${legal ? "rotate-180" : ""}`} />
+          ЗАЯВЛЕНИЕ О РЕЖИМЕ СЕКРЕТНОСТИ И ОБРАБОТКЕ ДАННЫХ
+        </button>
+        {legal && (
+          <ol className="panel siteIn mt-2 space-y-2.5 p-4">
+            {LEGAL_FULL.map((p, i) => (
+              <li key={i} className="flex gap-2.5 text-[12px] leading-relaxed text-[var(--txt2)]">
+                <span className="mono shrink-0 text-[var(--gold)]">{i + 1}.</span>
+                {p}
+              </li>
             ))}
-            <span className="blink text-[var(--brass)]">█</span>
+          </ol>
+        )}
+
+        {/* демо-доступы */}
+        <div className="panel fadeUp mt-5 p-4" style={{ animationDelay: "200ms" }}>
+          <p className="mono text-[10px] tracking-[0.22em] text-[var(--dim)]">
+            ДЕМОНСТРАЦИОННЫЕ IŦIRINIO ПРОТОТИПА <span className="text-[var(--gold)]">(данные — в вашем браузере)</span>
+          </p>
+          <div className="mt-2.5 grid gap-1.5 sm:grid-cols-2">
+            {DEMO.map((d) => (
+              <button
+                key={d.it}
+                onClick={() => {
+                  setIt(d.it);
+                  setPass(d.pass);
+                  setError(null);
+                  toast(`Реквизиты ${d.it} подставлены в форму`, "info");
+                }}
+                className="group flex items-center gap-2.5 border border-transparent px-2 py-1.5 text-left transition-all hover:border-[var(--line2)] hover:bg-[rgba(212,175,55,.04)]"
+              >
+                <span className="mono text-[12px] font-semibold text-[var(--gold2)] transition-colors group-hover:text-[var(--gold)]">
+                  {d.it}
+                </span>
+                <span className="mono text-[10.5px] text-[var(--dim)]">{d.pass}</span>
+                <span className="ml-auto hidden text-[10.5px] text-[var(--txt2)] md:block">{d.role}</span>
+              </button>
+            ))}
           </div>
         </div>
-      )}
+      </div>
+
+      <div className="mono mt-6 text-center text-[9.5px] leading-5 tracking-[0.22em] text-[var(--dim)]">
+        СОБСТВЕННОСТЬ АРГСКОГО КОРОЛЕВСТВА • СТ. 123 ROTTO • РАЗРАБОТЧИК: KOSTOSĘRIO DĘ ARCANUM (ГНИЦСТ)
+      </div>
     </div>
   );
 }
