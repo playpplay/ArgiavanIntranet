@@ -1,0 +1,314 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h3 class="card-title mb-0">Информация о счете</h3>
+            </div>
+            <div class="card-body">
+                <h5>{{ account.get_account_type_display }}</h5>
+                <p><strong>Номер счета:</strong> <code>{{ account.account_number }}</code></p>
+                <p><strong>Валюта счета:</strong> {{ account.currency.name }} ({{ account.currency.code }})</p>
+
+                <!-- БАЛАНС С КОНВЕРТАЦИЕЙ -->
+                <p><strong>Баланс:</strong>
+                    <span class="h5 {% if account.balance < 0 %}text-danger{% elif account.balance > 0 %}text-success{% endif %}">
+                        {{ account.balance|floatformat:2 }} {{ account.currency.symbol }}
+                    </span>
+
+                    {% if display_currency and display_currency != account.currency %}
+                        <br>
+                        <small class="text-muted">
+                            <i class="fas fa-exchange-alt"></i>
+                            ≈
+                            <span class="{% if converted_balance < 0 %}text-danger{% elif converted_balance > 0 %}text-success{% endif %}">
+                                {{ converted_balance|floatformat:2 }} {{ display_currency.symbol }}
+                            </span>
+                            {% if exchange_rate %}
+                                <br>
+                                <small class="text-muted">
+                                    Курс: 1 {{ account.currency.code }} = {{ exchange_rate|floatformat:4 }} {{ display_currency.code }}
+                                </small>
+                            {% endif %}
+                        </small>
+                    {% endif %}
+                </p>
+
+                {% if account.account_type == 'CREDIT' %}
+                    <p><strong>Кредитный лимит:</strong> {{ account.credit_limit|floatformat:2 }} {{ account.currency.symbol }}</p>
+                    <p><strong>Доступно:</strong>
+                        <span class="text-primary">{{ account.available_balance|floatformat:2 }} {{ account.currency.symbol }}</span>
+                    </p>
+                {% endif %}
+
+                <p><strong>Статус:</strong>
+                    <span class="badge
+                        {% if account.status == 'ACTIVE' %}bg-success
+                        {% elif account.status == 'PENDING' %}bg-warning
+                        {% elif account.status == 'FROZEN' %}bg-danger
+                        {% else %}bg-secondary{% endif %}">
+                        {{ account.get_status_display }}
+                    </span>
+                </p>
+                <p><strong>Дата открытия:</strong> {{ account.created_at|date:"d.m.Y H:i" }}</p>
+
+                <div class="mt-4">
+                    {% if account.status == 'ACTIVE' and account.is_active %}
+                        <a href="{% url 'transfer' %}" class="btn btn-primary">
+                            <i class="fas fa-exchange-alt"></i> Сделать перевод
+                        </a>
+                        <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#freezeModal">
+                            <i class="fas fa-snowflake"></i> Заморозить счет
+                        </button>
+                    {% elif account.status == 'FROZEN' %}
+                        <div class="alert alert-danger">
+                            <strong><i class="fas fa-exclamation-triangle"></i> Счет заморожен!</strong><br>
+                            Для разморозки счета обратитесь в отделение НацБанка Аргии.
+                        </div>
+                    {% endif %}
+                    <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left"></i> Назад
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Действия со счетом</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    {% if account.status == 'ACTIVE' and account.is_active %}
+                        <a href="{% url 'transfer' %}" class="btn btn-outline-primary">
+                            <i class="fas fa-exchange-alt"></i> Перевести средства
+                        </a>
+                        <button type="button" class="btn btn-outline-warning" data-bs-toggle="modal" data-bs-target="#freezeModal">
+                            <i class="fas fa-snowflake"></i> Заморозить счет
+                        </button>
+                    {% elif account.status == 'FROZEN' %}
+                        <button class="btn btn-outline-success" disabled>
+                            <i class="fas fa-fire"></i> Разморозить счет
+                        </button>
+                        <small class="text-muted mt-2">
+                            <i class="fas fa-info-circle"></i> Для разморозки обратитесь в отделение банка
+                        </small>
+                    {% endif %}
+                    {% if account.status == 'PENDING' %}
+                        <button class="btn btn-outline-info" disabled>
+                            <i class="fas fa-clock"></i> Ожидает подтверждения
+                        </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- КОНВЕРТАЦИЯ В ДРУГИЕ ВАЛЮТЫ -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Конвертация в другие валюты</h5>
+            </div>
+            <div class="card-body">
+                <div class="list-group">
+                    {% for currency in other_currencies %}
+                        <div class="list-group-item">
+                            <div class="d-flex w-100 justify-content-between">
+                                <strong>{{ currency.name }} ({{ currency.code }})</strong>
+                                <span>
+                                    {% if currency.converted_balance %}
+                                        {{ currency.converted_balance|floatformat:2 }} {{ currency.symbol }}
+                                    {% else %}
+                                        <span class="text-muted">Нет курса</span>
+                                    {% endif %}
+                                </span>
+                            </div>
+                            {% if currency.rate %}
+                                <small class="text-muted">
+                                    1 {{ account.currency.code }} = {{ currency.rate|floatformat:4 }} {{ currency.code }}
+                                </small>
+                            {% endif %}
+                        </div>
+                    {% empty %}
+                        <div class="list-group-item text-center text-muted">
+                            Нет других активных валют
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        {% if account.status == 'FROZEN' %}
+        <div class="card mt-4 border-danger">
+            <div class="card-header bg-danger text-white">
+                <h6 class="card-title mb-0"><i class="fas fa-snowflake"></i> Счет заморожен</h6>
+            </div>
+            <div class="card-body">
+                <p class="card-text">
+                    <strong>При заморозке счета:</strong>
+                    <ul class="small">
+                        <li>Все операции по счету приостановлены</li>
+                        <li>Невозможно выполнять переводы</li>
+                        <li>Снятие средств временно недоступно</li>
+                        <li>Для разморозки обратитесь в отделение банка</li>
+                    </ul>
+                </p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Модальное окно подтверждения заморозки -->
+{% if account.status == 'ACTIVE' and account.is_active %}
+<div class="modal fade" id="freezeModal" tabindex="-1" aria-labelledby="freezeModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="freezeModalLabel">
+                    <i class="fas fa-snowflake"></i> Подтверждение заморозки счета
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Вы уверены, что хотите заморозить счет <strong>{{ account.account_number }}</strong>?</p>
+                <div class="alert alert-warning">
+                    <strong><i class="fas fa-exclamation-triangle"></i> Внимание!</strong><br>
+                    После заморозки:
+                    <ul class="mb-0">
+                        <li>Все операции по счету будут приостановлены</li>
+                        <li>Вы не сможете совершать переводы</li>
+                        <li>Снятие средств будет временно недоступно</li>
+                        <li>Для разморозки счета необходимо будет обратиться в отделение банка</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <form method="post" action="{% url 'freeze_account' account.id %}">
+                    {% csrf_token %}
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="submit" class="btn btn-warning">
+                        <i class="fas fa-snowflake"></i> Да, заморозить счет
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <h4><i class="fas fa-history"></i> История операций по счету</h4>
+
+        {% if transactions %}
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Дата и время</th>
+                            <th>Тип операции</th>
+                            <th>Сумма ({{ account.currency.symbol }})</th>
+                            <th>Описание</th>
+                            <th>Контрагент</th>
+                            <th>Курс обмена</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for transaction in transactions %}
+                            <tr>
+                                <td>{{ transaction.timestamp|date:"d.m.Y H:i" }}</td>
+                                <td>
+                                    <span class="badge bg-info">{{ transaction.transaction_type.name }}</span>
+                                </td>
+
+                                <!-- Сумма в валюте счета -->
+                                <td class="{% if transaction.from_account == account %}text-danger{% else %}text-success{% endif %}">
+                                    {% if transaction.from_account == account %}
+                                        -{{ transaction.original_amount|default:transaction.amount|floatformat:2 }}
+                                    {% else %}
+                                        +{{ transaction.amount|floatformat:2 }}
+                                    {% endif %}
+                                    {{ account.currency.symbol }}
+                                </td>
+
+                                <td>{{ transaction.description|default:"-" }}</td>
+                                <td>
+                                    {% if transaction.from_account == account %}
+                                        <!-- Исходящая транзакция -->
+                                        <small>
+                                            {% if transaction.to_account %}
+                                                {{ transaction.to_account.account_number|truncatechars:12 }}
+                                            {% else %}
+                                                Система
+                                            {% endif %}
+                                        </small>
+                                        {% if transaction.to_account and transaction.to_account.user %}
+                                        <br>
+                                        <small class="text-muted">
+                                            {{ transaction.to_account.user.get_full_name|default:transaction.to_account.user.username }}
+                                        </small>
+                                        {% endif %}
+                                    {% else %}
+                                        <!-- Входящая транзакция -->
+                                        <small>
+                                            {% if transaction.from_account %}
+                                                {{ transaction.from_account.account_number|truncatechars:12 }}
+                                            {% else %}
+                                                Система
+                                            {% endif %}
+                                        </small>
+                                        {% if transaction.from_account and transaction.from_account.user %}
+                                        <br>
+                                        <small class="text-muted">
+                                            {{ transaction.from_account.user.get_full_name|default:transaction.from_account.user.username }}
+                                        </small>
+                                        {% endif %}
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if transaction.exchange_rate %}
+                                        <small>
+                                            1
+                                            {% if transaction.from_account %}
+                                                {{ transaction.from_account.currency.code }}
+                                            {% else %}
+                                                Система
+                                            {% endif %}
+                                            = {{ transaction.exchange_rate|floatformat:4 }}
+                                            {% if transaction.to_account %}
+                                                {{ transaction.to_account.currency.code }}
+                                            {% else %}
+                                                {{ account.currency.code }}
+                                            {% endif %}
+                                        </small>
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i> По этому счету еще не было операций.
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<style>
+.currency {
+    font-weight: bold;
+    background: rgba(0,0,0,0.05);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.9em;
+}
+</style>
+{% endblock %}

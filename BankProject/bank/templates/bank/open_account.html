@@ -1,0 +1,216 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title mb-0">
+                    <i class="fas fa-plus-circle"></i> Открытие нового счета
+                </h3>
+            </div>
+            <div class="card-body">
+                <!-- Блок с информацией о лимитах -->
+                <div class="alert alert-info mb-4">
+                    <h5><i class="fas fa-info-circle"></i> Правила открытия счетов</h5>
+                    <ul class="mb-0">
+                        <li>Все счета, открываемые самостоятельно, имеют статус <strong>"На рассмотрении"</strong></li>
+                        <li>Активация счета происходит после проверки администратором</li>
+                        <li>Максимальное количество счетов на рассмотрении: <strong>2</strong></li>
+                        <li>Текущее количество счетов на рассмотрении: <strong>{{ pending_accounts_count }}</strong></li>
+                        {% if pending_accounts_count >= 2 %}
+                            <li class="text-danger"><strong>Вы достигли лимита! Нельзя открывать новые счета пока текущие не будут активированы.</strong></li>
+                        {% endif %}
+                    </ul>
+                </div>
+
+                {% if pending_accounts_count < 2 %}
+                    {% if messages %}
+                        {% for message in messages %}
+                            <div class="alert alert-{{ message.tags }} alert-dismissible fade show">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+
+                    <form method="post">
+                        {% csrf_token %}
+
+                        <div class="mb-3">
+                            <label class="form-label">Тип счета</label>
+                            {{ form.account_type }}
+                            {% if form.account_type.errors %}
+                                <div class="text-danger small mt-1">{{ form.account_type.errors }}</div>
+                            {% endif %}
+                            <small class="text-muted">
+                                Доступные типы: Основной (расчетный), Накопительный
+                            </small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Валюта счета</label>
+                            {{ form.currency }}
+                            {% if form.currency.errors %}
+                                <div class="text-danger small mt-1">{{ form.currency.errors }}</div>
+                            {% endif %}
+                            <small class="text-muted">
+                                Выберите валюту для нового счета
+                            </small>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label">Начальный взнос (необязательно)</label>
+                            <div class="input-group">
+                                {{ form.initial_deposit }}
+                                <span class="input-group-text" id="currency-symbol">
+                                    <!-- Символ выбранной валюты будет обновляться JavaScript -->
+                                    выберите валюту
+                                </span>
+                            </div>
+                            {% if form.initial_deposit.errors %}
+                                <div class="text-danger small mt-1">{{ form.initial_deposit.errors }}</div>
+                            {% endif %}
+                            <small class="text-muted">
+                                Сумма будет списана с вашего расчетного счета. Если оставить 0, счет будет открыт с нулевым балансом.
+                            </small>
+                        </div>
+
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <strong>Внимание:</strong> После отправки заявки счет получит статус <strong>"На рассмотрении"</strong>.
+                            Вы сможете использовать его только после активации администратором.
+                        </div>
+
+                        <div class="d-grid gap-2 d-md-flex">
+                            <button type="submit" class="btn btn-primary me-md-2" id="submit-btn">
+                                <i class="fas fa-paper-plane"></i> Отправить заявку на открытие счета
+                            </button>
+                            <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary">
+                                <i class="fas fa-times"></i> Отмена
+                            </a>
+                        </div>
+                    </form>
+
+                    <!-- Блок с информацией о моих счетах на рассмотрении -->
+                    <div class="card mt-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-clock"></i> Мои счета на рассмотрении ({{ pending_accounts_count }})
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            {% if pending_accounts_count > 0 %}
+                                <p class="text-muted">
+                                    <i class="fas fa-info-circle"></i> Эти счета ожидают активации администратором.
+                                </p>
+                            {% else %}
+                                <p class="text-muted">
+                                    <i class="fas fa-check-circle text-success"></i> У вас нет счетов на рассмотрении.
+                                </p>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="alert alert-danger">
+                        <h5><i class="fas fa-ban"></i> Достигнут лимит счетов на рассмотрении</h5>
+                        <p class="mb-2">У вас уже есть 2 счета, ожидающих активации администратором.</p>
+                        <p class="mb-0">
+                            Пожалуйста, дождитесь активации текущих счетов или обратитесь в поддержку для ускорения процесса.
+                        </p>
+                    </div>
+                    <div class="d-grid gap-2">
+                        <a href="{% url 'dashboard' %}" class="btn btn-primary">
+                            <i class="fas fa-arrow-left"></i> Вернуться в личный кабинет
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Обновляем символ валюты при выборе
+    const currencySelect = document.querySelector('#id_currency');
+    const currencySymbol = document.querySelector('#currency-symbol');
+    const submitBtn = document.querySelector('#submit-btn');
+
+    // Начальное состояние
+    if ({{ pending_accounts_count }} >= 2) {
+        if (submitBtn) {
+            submitBtn.disabled = true;
+        }
+    }
+
+    // Функция для обновления символа валюты
+    function updateCurrencySymbol() {
+        if (currencySelect && currencySymbol) {
+            const selectedOption = currencySelect.options[currencySelect.selectedIndex];
+            if (selectedOption.text) {
+                // Извлекаем символ из текста опции (формат: "Название (КОД) - СИМВОЛ")
+                const text = selectedOption.text;
+                const symbolMatch = text.match(/-\s*([^\s]+)$/);
+                if (symbolMatch) {
+                    currencySymbol.textContent = symbolMatch[1];
+                } else {
+                    currencySymbol.textContent = '?';
+                }
+            }
+        }
+    }
+
+    // Обновляем при загрузке
+    updateCurrencySymbol();
+
+    // Обновляем при изменении выбора
+    if (currencySelect) {
+        currencySelect.addEventListener('change', updateCurrencySymbol);
+    }
+
+    // Обработка отправки формы
+    const form = document.querySelector('form');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            const accountType = document.querySelector('#id_account_type').value;
+            const accountTypeText = document.querySelector('#id_account_type option:checked').text;
+
+            if ({{ pending_accounts_count }} >= 2) {
+                e.preventDefault();
+                alert('Вы достигли лимита счетов на рассмотрении (2). Пожалуйста, дождитесь активации текущих счетов.');
+                return false;
+            }
+
+            if (confirm(`Вы уверены, что хотите отправить заявку на открытие ${accountTypeText} счета?\n\nСтатус счета: На рассмотрении\nДоступно только после активации администратором.`)) {
+                // Показываем сообщение о загрузке
+                if (submitBtn) {
+                    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Отправка заявки...';
+                    submitBtn.disabled = true;
+                }
+                return true;
+            } else {
+                e.preventDefault();
+                return false;
+            }
+        });
+    }
+});
+</script>
+
+<style>
+#id_initial_deposit {
+    border-right: 0;
+}
+.input-group-text {
+    background-color: #f8f9fa;
+    font-weight: bold;
+    min-width: 60px;
+    justify-content: center;
+}
+.alert ul {
+    padding-left: 1.5rem;
+    margin-bottom: 0;
+}
+</style>
+{% endblock %}

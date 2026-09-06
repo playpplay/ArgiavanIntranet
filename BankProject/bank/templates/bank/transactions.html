@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <h2>История операций (ARY)</h2>
+
+        {% if transactions %}
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Дата и время</th>
+                            <th>Тип операции</th>
+                            <th>Сумма (ARY)</th>
+                            <th>Описание</th>
+                            <th>Счет отправителя</th>
+                            <th>Счет получателя</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for transaction in transactions %}
+                            <tr>
+                                <td>{{ transaction.timestamp|date:"d.m.Y H:i" }}</td>
+                                <td>
+                                    {% if transaction.transaction_type == 'TAX_DEDUCTION' %}
+                                        <span class="badge bg-danger">Налоговый вычет</span>
+                                    {% else %}
+                                        {{ transaction.get_transaction_type_display }}
+                                    {% endif %}
+                                </td>
+                                <td class="{% if transaction.transaction_type == 'TAX_DEDUCTION' %}text-danger{% elif transaction.from_account.user == user %}text-danger{% else %}text-success{% endif %}">
+                                    {% if transaction.transaction_type == 'TAX_DEDUCTION' %}
+                                        -{{ transaction.amount }} ARY
+                                    {% elif transaction.from_account.user == user %}
+                                        -{{ transaction.amount }} ARY
+                                    {% else %}
+                                        +{{ transaction.amount }} ARY
+                                    {% endif %}
+                                </td>
+                                <td>{{ transaction.description }}</td>
+                                <td>
+                                    {% if transaction.from_account %}
+                                        {{ transaction.from_account.account_number }}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if transaction.to_account %}
+                                        {{ transaction.to_account.account_number }}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="alert alert-info">
+                У вас пока нет операций.
+            </div>
+        {% endif %}
+        
+        <div class="mt-3">
+            <a href="{% url 'dashboard' %}" class="btn btn-primary">Назад в личный кабинет</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

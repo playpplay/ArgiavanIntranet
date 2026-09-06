@@ -1,0 +1,114 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title mb-0">Мой профиль в НацБанке Аргии</h3>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Логин</label>
+                            <input type="text" class="form-control" value="{{ user.username }}" readonly>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Паспортные данные</label>
+                            <input type="text" class="form-control" value="{{ user.passport_number }}" readonly>
+                            <small class="form-text text-muted">Формат: 000000000000-000000000000</small>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="first_name" class="form-label">Имя</label>
+                            <input type="text" class="form-control" id="first_name" name="first_name" value="{{ user.first_name }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="last_name" class="form-label">Фамилия</label>
+                            <input type="text" class="form-control" id="last_name" name="last_name" value="{{ user.last_name }}">
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="email" class="form-label">Email</label>
+                            <input type="email" class="form-control" id="email" name="email" value="{{ user.email }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="phone" class="form-label">Телефон</label>
+                            <input type="text" class="form-control" id="phone" name="phone" value="{{ user.phone|default_if_none:'' }}">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="address" class="form-label">Адрес</label>
+                        <textarea class="form-control" id="address" name="address" rows="3">{{ user.address|default_if_none:'' }}</textarea>
+                    </div>
+
+                    <div class="alert alert-info">
+                        <strong>Информация:</strong> Для изменения паспортных данных обратитесь в отделение банка.
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Сохранить изменения</button>
+                    <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary">Назад</a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="card-title mb-0">Мои счета (все суммы в ARY)</h4>
+            </div>
+            <div class="card-body">
+                {% if accounts %}
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Номер счета</th>
+                                    <th>Тип</th>
+                                    <th>Баланс (ARY)</th>
+                                    <th>Статус</th>
+                                    <th>Дата открытия</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for account in accounts %}
+                                    <tr>
+                                        <td><a href="{% url 'account_detail' account.id %}">{{ account.account_number }}</a></td>
+                                        <td>{{ account.get_account_type_display }}</td>
+                                        <td>{{ account.balance }} ARY</td>
+                                        <td>
+                                            <span class="badge 
+                                                {% if account.status == 'ACTIVE' %}bg-success
+                                                {% elif account.status == 'PENDING' %}bg-warning
+                                                {% elif account.status == 'FROZEN' %}bg-danger
+                                                {% else %}bg-secondary{% endif %}">
+                                                {{ account.get_status_display }}
+                                            </span>
+                                        </td>
+                                        <td>{{ account.created_at|date:"d.m.Y" }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="alert alert-info">
+                        У вас пока нет открытых счетов.
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
