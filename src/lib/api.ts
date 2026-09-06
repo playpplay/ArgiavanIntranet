@@ -33,8 +33,12 @@ export const API_ENDPOINTS: Endpoint[] = [
   { m: "POST", p: "/giks/log/", d: "Запись вызова в журнал ГИКС" },
   { m: "GET", p: "/mail/inbox/", d: "Входящие письма КЭП (post.arg)" },
   { m: "POST", p: "/mail/send/", d: "Отправка письма" },
-  { m: "GET", p: "/bank/balance/", d: "Остаток e-T (sb.arg)" },
-  { m: "POST", p: "/bank/transfer/", d: "Перевод e-T с назначением платежа" },
+  { m: "GET", p: "/bank/accounts/", d: "Счета клиента (StatusBanko, sb.arg:8001)" },
+  { m: "POST", p: "/bank/accounts/open/", d: "Заявление на счёт (лимит — 2 на рассмотрении)" },
+  { m: "POST", p: "/bank/transfer/", d: "Перевод между счетами с конверсией через основную валюту" },
+  { m: "GET", p: "/bank/rates/", d: "Курсы валют к основной (ARY)" },
+  { m: "POST", p: "/bank/accounts/<id>/approve/", d: "Утверждение/отклонение заявления (управляющий)" },
+  { m: "POST", p: "/bank/accounts/government/", d: "Государственный счёт (Корона / ЮЛ банка)" },
   { m: "GET", p: "/audit/log/", d: "Журнал аудита (root, tech)" },
 ];
 

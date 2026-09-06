@@ -74,14 +74,6 @@ export interface CallRec {
   duration: number;
   status: "ok" | "missed" | "declined" | "noanswer";
 }
-export interface Tx {
-  id: string;
-  from: string;
-  to: string;
-  amount: number;
-  purpose: string;
-  ts: number;
-}
 export interface LogEntry {
   ts: number;
   text: string;
@@ -95,7 +87,6 @@ export interface DB {
   domains: Domain[];
   emails: EmailMsg[];
   calls: CallRec[];
-  txs: Tx[];
   log: LogEntry[];
 }
 
@@ -318,11 +309,6 @@ function seed(): DB {
       { id: "c1", from: "krol", to: "kollegia", ts: NOW - 5 * H, duration: 254, status: "ok" },
       { id: "c2", from: "ivanov", to: "krol", ts: NOW - 1 * D - 3 * H, duration: 61, status: "ok" },
       { id: "c3", from: "statusbanko", to: "krol", ts: NOW - 2 * D - 7 * H, duration: 0, status: "missed" },
-    ],
-    txs: [
-      { id: "t1", from: "ivanov", to: "statusbanko", amount: 3, purpose: "Пошлина за доменное имя (зона .arg)", ts: NOW - 2 * D },
-      { id: "t2", from: "statusbanko", to: "krol", amount: 1200, purpose: "Ежемесячное довольствие Гвардии", ts: NOW - 5 * D },
-      { id: "t3", from: "krol", to: "arcanum", amount: 450, purpose: "Закупка машин для узла 07", ts: NOW - 9 * D },
     ],
     log: [
       { ts: NOW - 1 * H, text: "Плановая сверка Государственного реестра доменов" },
@@ -915,32 +901,6 @@ export function logCall(from: string, to: string, duration: number, status: Call
 export function callsFor(login: string): CallRec[] {
   return getDB()
     .calls.filter((c) => c.from === login || c.to === login)
-    .sort((a, b) => b.ts - a.ts);
-}
-
-/* ---------- банк ---------- */
-
-export function balanceOf(login: string): number {
-  const db = getDB();
-  const base = db.users.find((u) => u.role === "legal")?.login === login ? 150000 : 240;
-  let b = base;
-  for (const t of db.txs) {
-    if (t.to === login) b += t.amount;
-    if (t.from === login) b -= t.amount;
-  }
-  return b;
-}
-export function transfer(from: string, to: string, amount: number, purpose: string): string | null {
-  if (amount <= 0) return "Сумма должна быть положительной";
-  if (balanceOf(from) < amount) return "Недостаточно средств на счёте";
-  if (from === to) return "Перевод самому себе запрещён Уложением";
-  mutate((db) => db.txs.push({ id: uid(), from, to, amount, purpose: purpose.trim() || "Платёж", ts: Date.now() }));
-  addLog(`StatusBanko: перевод ${amount.toLocaleString("ru-RU")} e-T: ${from} → ${to}`);
-  return null;
-}
-export function txsFor(login: string): Tx[] {
-  return getDB()
-    .txs.filter((t) => t.from === login || t.to === login)
     .sort((a, b) => b.ts - a.ts);
 }
 
