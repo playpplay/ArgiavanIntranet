@@ -1,0 +1,166 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h3 class="card-title mb-0">
+                    <i class="fas fa-landmark"></i> {{ title|default:"Создание государственного счета" }}
+                </h3>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info mb-4">
+                    <h5><i class="fas fa-info-circle"></i> Создание государственного счета</h5>
+                    <p class="mb-2">Эта форма предназначена для создания государственных счетов без привязки к конкретному пользователю.</p>
+                    <ul class="mb-0">
+                        <li>Счет будет создан без владельца</li>
+                        <li>Можно задать специальный номер счета (например, для бюджета или резервов)</li>
+                        <li>Счет сразу будет активен и готов к использованию</li>
+                        <li>Доступно только администраторам системы</li>
+                    </ul>
+                </div>
+
+                {% if messages %}
+                    {% for message in messages %}
+                        <div class="alert alert-{{ message.tags }} alert-dismissible fade show">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+
+                <form method="post">
+                    {% csrf_token %}
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Номер счета</label>
+                            {{ form.account_number }}
+                            {% if form.account_number.errors %}
+                                <div class="text-danger small mt-1">{{ form.account_number.errors }}</div>
+                            {% endif %}
+                            <small class="text-muted">8-20 символов. Если оставить пустым, будет сгенерирован автоматически</small>
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Тип счета</label>
+                            {{ form.account_type }}
+                            {% if form.account_type.errors %}
+                                <div class="text-danger small mt-1">{{ form.account_type.errors }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Валюта</label>
+                            {{ form.currency }}
+                            {% if form.currency.errors %}
+                                <div class="text-danger small mt-1">{{ form.currency.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Название счета</label>
+                            {{ form.account_name }}
+                            {% if form.account_name.errors %}
+                                <div class="text-danger small mt-1">{{ form.account_name.errors }}</div>
+                            {% endif %}
+                            <small class="text-muted">Например: "Бюджет Министерства финансов"</small>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Начальный баланс</label>
+                            <div class="input-group">
+                                {{ form.balance }}
+                                <span class="input-group-text" id="currency-symbol">ARY</span>
+                            </div>
+                            {% if form.balance.errors %}
+                                <div class="text-danger small mt-1">{{ form.balance.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Описание</label>
+                            {{ form.description }}
+                            {% if form.description.errors %}
+                                <div class="text-danger small mt-1">{{ form.description.errors }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="alert alert-warning mt-4">
+                        <h6><i class="fas fa-exclamation-triangle"></i> Важная информация</h6>
+                        <ul class="mb-0">
+                            <li>Счет будет создан сразу в статусе "Активен"</li>
+                            <li>Счет не будет привязан к пользователю</li>
+                            <li>Этот счет можно использовать для государственных операций</li>
+                            <li>Пользователи смогут переводить средства на этот счет</li>
+                        </ul>
+                    </div>
+
+                    <div class="d-grid gap-2 d-md-flex mt-4">
+                        <button type="submit" class="btn btn-primary me-md-2">
+                            <i class="fas fa-save"></i> Создать государственный счет
+                        </button>
+                        <a href="{% url 'admin:bank_account_changelist' %}" class="btn btn-outline-secondary">
+                            <i class="fas fa-times"></i> Отмена (вернуться в админку)
+                        </a>
+                        <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary ms-auto">
+                            <i class="fas fa-home"></i> На главную
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Обновляем символ валюты при выборе
+    const currencySelect = document.querySelector('#id_currency');
+    const currencySymbol = document.querySelector('#currency-symbol');
+
+    function updateCurrencySymbol() {
+        if (currencySelect && currencySymbol) {
+            const selectedOption = currencySelect.options[currencySelect.selectedIndex];
+            if (selectedOption.text) {
+                // Извлекаем символ из текста опции
+                const text = selectedOption.text;
+                const symbolMatch = text.match(/-\s*([^\s]+)$/);
+                if (symbolMatch) {
+                    currencySymbol.textContent = symbolMatch[1];
+                } else {
+                    currencySymbol.textContent = '?';
+                }
+            }
+        }
+    }
+
+    // Обновляем при загрузке
+    updateCurrencySymbol();
+
+    // Обновляем при изменении выбора
+    if (currencySelect) {
+        currencySelect.addEventListener('change', updateCurrencySymbol);
+    }
+});
+</script>
+
+<style>
+.input-group-text {
+    background-color: #f8f9fa;
+    font-weight: bold;
+    min-width: 60px;
+    justify-content: center;
+}
+.alert ul {
+    padding-left: 1.5rem;
+    margin-bottom: 0;
+}
+</style>
+{% endblock %}

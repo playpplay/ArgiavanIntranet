@@ -1,0 +1,74 @@
+[
+    {
+        "model": "bank.transactiontype",
+        "pk": 1,
+        "fields": {
+            "name": "Перевод",
+            "code": "TRANSFER",
+            "description": "Перевод средств между счетами",
+            "is_positive": false,
+            "is_active": true,
+            "created_at": "2024-01-08T10:00:00Z"
+        }
+    },
+    {
+        "model": "bank.transactiontype",
+        "pk": 2,
+        "fields": {
+            "name": "Пополнение",
+            "code": "DEPOSIT",
+            "description": "Пополнение счета",
+            "is_positive": true,
+            "is_active": true,
+            "created_at": "2024-01-08T10:00:00Z"
+        }
+    },
+    {
+        "model": "bank.transactiontype",
+        "pk": 3,
+        "fields": {
+            "name": "Снятие",
+            "code": "WITHDRAWAL",
+            "description": "Снятие средств со счета",
+            "is_positive": false,
+            "is_active": true,
+            "created_at": "2024-01-08T10:00:00Z"
+        }
+    },
+    {
+        "model": "bank.transactiontype",
+        "pk": 4,
+        "fields": {
+            "name": "Налоговый вычет",
+            "code": "TAX_DEDUCTION",
+            "description": "Налоговый вычет со счета",
+            "is_positive": false,
+            "is_active": true,
+            "created_at": "2024-01-08T10:00:00Z"
+        }
+    },
+    {
+        "model": "bank.transactiontype",
+        "pk": 5,
+        "fields": {
+            "name": "Комиссия",
+            "code": "FEE",
+            "description": "Банковская комиссия",
+            "is_positive": false,
+            "is_active": true,
+            "created_at": "2024-01-08T10:00:00Z"
+        }
+    },
+    {
+        "model": "bank.transactiontype",
+        "pk": 6,
+        "fields": {
+            "name": "Начисление процентов",
+            "code": "INTEREST",
+            "description": "Начисление процентов на счет",
+            "is_positive": true,
+            "is_active": true,
+            "created_at": "2024-01-08T10:00:00Z"
+        }
+    }
+]

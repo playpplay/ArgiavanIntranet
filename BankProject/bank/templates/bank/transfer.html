@@ -1,0 +1,284 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title mb-0">
+                    <i class="fas fa-exchange-alt"></i> Перевод средств
+                    {% if primary_currency %}
+                    <small class="text-muted float-end">Все переводы через {{ primary_currency.code }}</small>
+                    {% endif %}
+                </h3>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+
+                    {% if messages %}
+                        {% for message in messages %}
+                            <div class="alert alert-{{ message.tags }} alert-dismissible fade show">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+
+                    <div class="mb-3">
+                        <label class="form-label">Счет списания</label>
+                        <select name="from_account" class="form-select" required>
+                            <option value="">--- Выберите счет ---</option>
+                            {% for account in form.from_account.field.queryset %}
+                                <option value="{{ account.id }}"
+                                        {% if form.from_account.value and form.from_account.value|stringformat:"i" == account.id|stringformat:"i" %}selected{% endif %}>
+                                    {{ account.account_number }} - {{ account.get_account_type_display }}
+                                    ({{ account.balance|floatformat:15 }} {{ account.currency.symbol }})
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Номер счета получателя</label>
+                        <input type="text" name="to_account_number" class="form-control"
+                               placeholder="Введите 16-значный номер счета"
+                               value="{{ form.to_account_number.value|default:'' }}" required>
+                        {% if form.to_account_number.errors %}
+                            <div class="text-danger small mt-1">{{ form.to_account_number.errors }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Сумма перевода</label>
+                        <div class="input-group">
+                            <input type="number" name="amount" class="form-control"
+                                   step="any" min="0.000000000000001" placeholder="0.000000000000001"  <!-- Изменено -->
+                                   <!---value="{{ form.amount.value|default:'' }}" required>--->
+                            <span class="input-group-text">
+                                <!-- Показываем символ валюты выбранного счета -->
+                                {% if form.from_account.value %}
+                                    {% for account in form.from_account.field.queryset %}
+                                        {% if account.id|stringformat:"i" == form.from_account.value|stringformat:"i" %}
+                                            {{ account.currency.symbol }}
+                                        {% endif %}
+                                    {% endfor %}
+                                {% else %}
+                                    выберите счет
+                                {% endif %}
+                            </span>
+                        </div>
+                        <small class="text-muted">
+                            Сумма в валюте выбранного счета. Конвертация в {{ primary_currency.code|default:"основную валюту" }} произойдет автоматически.
+                            <br>Минимальная сумма: 0.000000000000001
+                        </small>
+                        {% if form.amount.errors %}
+                            <div class="text-danger small mt-1">{{ form.amount.errors }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Описание (необязательно)</label>
+                        <textarea name="description" class="form-control" rows="2"
+                                  placeholder="Назначение платежа">{{ form.description.value|default:'' }}</textarea>
+                    </div>
+
+                    <div class="d-grid gap-2 d-md-flex">
+                        <button type="submit" class="btn btn-primary me-md-2">
+                            <i class="fas fa-paper-plane"></i> Выполнить перевод
+                        </button>
+                        <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary">
+                            <i class="fas fa-times"></i> Отмена
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0"><i class="fas fa-wallet"></i> Мои активные счета</h5>
+            </div>
+            <div class="card-body">
+                {% if form.from_account.field.queryset %}
+                    <div class="row">
+                        {% for account in form.from_account.field.queryset %}
+                            <div class="col-md-6 mb-3">
+                                <div class="card h-100">
+                                    <div class="card-body">
+                                        <h6 class="card-title">
+                                            {{ account.get_account_type_display }}
+                                            <span class="badge bg-info float-end">{{ account.currency.code }}</span>
+                                        </h6>
+                                        <p class="mb-1">
+                                            <small class="text-muted">Номер:</small><br>
+                                            <code>{{ account.account_number }}</code>
+                                        </p>
+                                        <p class="mb-1">
+                                            <small class="text-muted">Баланс:</small><br>
+                                            <span class="h5 {% if account.balance < 0 %}text-danger{% elif account.balance > 0 %}text-success{% endif %}">
+                                                {{ account.balance|floatformat:15 }} {{ account.currency.symbol }}  <!-- Изменено -->
+                                            </span>
+                                        </p>
+                                        {% if account.account_type == 'CREDIT' %}
+                                            <p class="mb-0">
+                                                <small class="text-muted">Доступно:</small>
+                                                <span class="float-end">{{ account.available_balance|floatformat:15 }} {{ account.currency.symbol }}</span>  <!-- Изменено -->
+                                            </p>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle"></i> У вас нет активных счетов для перевода.
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Правая колонка (курсы валют) -->
+    <div class="col-md-4">
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-chart-line"></i>
+                    {% if primary_currency %}
+                        Курсы валют к {{ primary_currency.name }} ({{ primary_currency.symbol }})
+                    {% else %}
+                        Курсы валют
+                    {% endif %}
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if primary_currency %}
+                    <div class="alert alert-info">
+                        <small><i class="fas fa-info-circle"></i> Все переводы конвертируются через {{ primary_currency.code }}</small>
+                    </div>
+
+                    <h6>Покупка {{ primary_currency.code }} (Валюты → {{ primary_currency.code }})</h6>
+                    {% if exchange_rates_to_ary %}
+                        <table class="table table-sm table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Валюта</th>
+                                    <th>Курс</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for rate_info in exchange_rates_to_ary %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ rate_info.currency.code }}</strong><br>
+                                            <small class="text-muted">{{ rate_info.currency.name }}</small>
+                                        </td>
+                                        <td>
+                                            {% if rate_info.rate %}
+                                                <span class="badge bg-success">
+                                                    1 {{ rate_info.currency.symbol }} = {{ rate_info.rate|floatformat:15 }} {{ primary_currency.symbol }}  <!-- Изменено -->
+                                                </span>
+                                            {% else %}
+                                                <span class="text-muted">Нет курса</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    {% else %}
+                        <p class="text-muted">Нет данных о курсах покупки</p>
+                    {% endif %}
+
+                    <h6 class="mt-4">Продажа {{ primary_currency.code }} ({{ primary_currency.code }} → Валюты)</h6>
+                    {% if exchange_rates_from_ary %}
+                        <table class="table table-sm table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Валюта</th>
+                                    <th>Курс</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for rate_info in exchange_rates_from_ary %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ rate_info.currency.code }}</strong><br>
+                                            <small class="text-muted">{{ rate_info.currency.name }}</small>
+                                        </td>
+                                        <td>
+                                            {% if rate_info.rate %}
+                                                <span class="badge bg-info">
+                                                    1 {{ primary_currency.symbol }} = {{ rate_info.rate|floatformat:15 }} {{ rate_info.currency.symbol }}  <!-- Изменено -->
+                                                </span>
+                                            {% else %}
+                                                <span class="text-muted">Нет курса</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    {% else %}
+                        <p class="text-muted">Нет данных о курсах продажи</p>
+                    {% endif %}
+
+                    <div class="mt-3">
+                        <small class="text-muted">
+                            <i class="fas fa-clock"></i> Курсы обновляются в реальном времени.<br>
+                            <i class="fas fa-calculator"></i> Конвертация: Валюта счета → {{ primary_currency.code }} → Валюта получателя<br>
+                            <i class="fas fa-exclamation-triangle"></i> <strong>Поддержка высокой точности:</strong> до 15 знаков после запятой
+                        </small>
+                    </div>
+                {% else %}
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle"></i> Основная валюта не настроена в системе.
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- КАК РАБОТАЕТ ПЕРЕВОД -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0"><i class="fas fa-info-circle"></i> Как работает перевод</h5>
+            </div>
+            <div class="card-body">
+                <ol class="small">
+                    <li>Выбираете счет отправителя</li>
+                    <li>Вводите сумму в валюте счета отправителя (до 15 знаков после запятой)</li>
+                    {% if primary_currency %}
+                    <li>Система конвертирует сумму в {{ primary_currency.code }} по курсу "Валюта → {{ primary_currency.code }}"</li>
+                    <li>Если валюта получателя не {{ primary_currency.code }}, система конвертирует из {{ primary_currency.code }} в валюту получателя</li>
+                    {% else %}
+                    <li>Система конвертирует сумму в основную валюту</li>
+                    <li>Система конвертирует из основной валюты в валюту получателя</li>
+                    {% endif %}
+                    <li>Получатель получает сумму в своей валюте</li>
+                </ol>
+                <div class="alert alert-warning small">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <strong>Важно:</strong> При переводе между разными валютами применяется двойная конвертация через основную валюту.
+                </div>
+                <div class="alert alert-info small">
+                    <i class="fas fa-calculator"></i>
+                    <strong>Высокая точность:</strong> Система теперь поддерживает переводы с точностью до 15 знаков после запятой.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.table th, .table td {
+    padding: 0.5rem;
+    vertical-align: middle;
+}
+.badge {
+    font-size: 0.8em;
+    padding: 0.25em 0.6em;
+}
+</style>
+{% endblock %}
